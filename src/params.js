@@ -1,8 +1,8 @@
 import { ClientError } from "./http.js";
 
-export const UUID_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+const UUID_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 export const GENERIC_UUID_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i;
-export const ITEM_TAG_PATTERN = /^[A-Za-z0-9_:+;.-]{1,120}$/;
+const ITEM_TAG_PATTERN = /^[A-Za-z0-9_:+;.-]{1,120}$/;
 
 export function requireContainerId(url) {
   const container = (url.searchParams.get("container") || "").trim();

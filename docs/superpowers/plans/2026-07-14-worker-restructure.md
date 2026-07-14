@@ -542,7 +542,7 @@ Everything before the `try` (OPTIONS/CORS block, method check, `/health` with ve
 
 - [ ] **Step 2: Confirm nothing else remains** — `src/worker.js` should now contain only: imports, `ROUTES`, `export default { fetch }`, and `secretsMatch`. Run: `grep -c "^function\|^async function\|^class" src/worker.js` — Expected: `1` (only `secretsMatch`).
 
-- [ ] **Step 3: Verify** — Run: `npm test && npm run deploy:dry`. Expected: exit 0; the suite's 404, 401, 405, `/health`, and `/privacy` assertions prove the lifecycle is intact.
+- [ ] **Step 3: Verify** — Run: `npm test && npm run deploy:dry`. Expected: exit 0; the suite's 401 and `/health` assertions cover part of the lifecycle (404/405/`/privacy` verified by direct probes during final review).
 
 - [ ] **Step 4: Commit**
 

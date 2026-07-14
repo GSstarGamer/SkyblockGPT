@@ -324,7 +324,7 @@ export async function buildSection(section, profile, member, skillResource = nul
   }
 }
 
-export function compactSkills(member, skillResource = null) {
+function compactSkills(member, skillResource = null) {
   const experience = collectSkillExperience(member);
   const skills = {};
 
