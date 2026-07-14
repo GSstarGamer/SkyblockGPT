@@ -1,6 +1,6 @@
 {
   "name": "skyblockgpt",
-  "version": "12.3.0",
+  "version": "12.4.0",
   "private": true,
   "description": "Source, Actions, tests, and Cloudflare deployment automation for SkyBlockGPT.",
   "type": "module",
@@ -20,4 +20,3 @@
     "wrangler": "4.110.0"
   }
 }
-
