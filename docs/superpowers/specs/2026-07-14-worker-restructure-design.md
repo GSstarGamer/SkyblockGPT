@@ -23,8 +23,9 @@ src/
   hypixel.js    upstream fetch, timeout, memory cache, resource fetchers
   profiles.js   profile selection, member access, overview builder
   sections.js   PROFILE_SECTIONS, buildSection, per-section builders
-  items.js      NBT container discovery, item compaction, gear, accessories
-  nbt.js        NbtReader class, base64, gzip, decodeInventoryBlob
+  items.js      NBT container discovery, inventory blob decode,
+                item compaction, gear, accessories
+  nbt.js        NbtReader class, base64, gzip parsing primitives
   market.js     bazaar/auction compactors and comparators
   util.js       generic helpers (pick, sanitize, round, pagination, batching)
   routes/
@@ -43,7 +44,7 @@ src/
 - `hypixel.js` → `http.js`.
 - `items.js` → `nbt.js`, `util.js`.
 - `sections.js` → `items.js`, `util.js`.
-- `market.js` → `items.js`, `nbt.js`, `util.js` (`compactAuction` decodes `item_bytes` via `decodeInventoryBlob`).
+- `market.js` → `items.js`, `util.js` (`compactAuction` decodes `item_bytes` via `decodeInventoryBlob` from `items.js`).
 - `profiles.js` → `hypixel.js`, `sections.js`, `params.js`, `util.js`.
 - `routes/*.js` → any of the above.
 - `worker.js` → `routes/*.js`, `http.js`.
@@ -58,8 +59,8 @@ src/
 | `hypixel.js` | `UPSTREAM_USER_AGENT`, `fetchHypixelJson`, `fetchJsonUpstream`, `getMemoryCache`, `setMemoryCache`, `fetchSkyBlockItemNameMap`, `fetchCollectionResource`, `fetchSkillResource`, `fetchProfiles` |
 | `profiles.js` | `selectProfile`, `compactProfile`, `getMember`, `isDeleted`, `loadSelectedMember`, `buildOverview` |
 | `sections.js` | `PROFILE_SECTIONS`, `buildSection`, `compactSkills`, `collectSkillExperience`, `normalizeSkillName`, `calculateSkillProgress`, `emptySkillProgress`, `compactMining`, `compactForge`, `isForgeProcess`, `compactForgeProcess`, `compactForaging`, `compactTreePerks`, `formatTreePerkName`, `compactPowder`, `compactStats`, `filterNumericStats`, `readTreeScopedValue`, `compactSlayers`, `compactDungeons`, `compactPets`, `compactGarden`, `compactMuseum`, `flattenCollections`, `compactPlayerCollections`, `compactCollectionTier`, `collectionUnlockText`, `compactCollectionItem` |
-| `items.js` | `findNbtContainers`, `findSacksCounts`, `isNbtBlob`, `containerMetadata`, `inventoryContainerKind`, `inventoryContainerLabel`, `compactGear`, `compactAccessories`, `compactNbtItem`, `expandNbtItem`, `inferArmorSlot`, `inferEquipmentCategory`, `cleanItemName`, `flattenTextComponent`, `formatItemId` |
-| `nbt.js` | `NbtReader`, `decodeInventoryBlob`, `decodeBase64`, `decompressGzip` |
+| `items.js` | `decodeInventoryBlob`, `findNbtContainers`, `findSacksCounts`, `isNbtBlob`, `containerMetadata`, `inventoryContainerKind`, `inventoryContainerLabel`, `compactGear`, `compactAccessories`, `compactNbtItem`, `expandNbtItem`, `inferArmorSlot`, `inferEquipmentCategory`, `cleanItemName`, `flattenTextComponent`, `formatItemId` |
+| `nbt.js` | `NbtReader`, `decodeBase64`, `decompressGzip` (all three exported; consumed by `decodeInventoryBlob` in `items.js`) |
 | `market.js` | `compactBazaarProduct`, `compareBazaarProducts`, `compactAuction`, `compactEndedAuction`, `auctionPrice`, `binPrice`, `resolveSkyBlockItem`, `normalizeItemSearchText`, `skyBlockItemIdsMatch` |
 | `util.js` | `pick`, `sanitize`, `number`, `optionalNumber`, `firstNumber`, `round`, `objectOrEmpty`, `stringOrNull`, `paginateRecords`, `mapInBatches`, `normalizeUnixMilliseconds`, `isoFromUnixMs` |
 | `routes/player.js` | `handleProfiles`, `handleSummary`, `handleSection`, `handlePlayerCollections`, `handlePlayerAccessories`, `handleSacks`, `handlePlayerExtra`, `compareSackItems`, `EXTRA_KINDS` |
@@ -68,6 +69,8 @@ src/
 | `routes/misc.js` | `handleResources`, `handleFeed`, `RESOURCE_KINDS`, `FEED_KINDS`, `compactResourceItem`, `resourceRecordMatches` |
 
 Placement rule for small helpers: a helper consumed by exactly one handler file lives in that handler file; shared builders live in their domain module. If implementation reveals a helper listed above is used more widely (or only once), it moves to match this rule — usage, not this table, is authoritative for tiny helpers. Behavior is unaffected either way.
+
+**Amendment (Task 3 discovery, 2026-07-14):** `decodeInventoryBlob` calls `compactNbtItem` directly, so the two must share a module to keep the graph acyclic. `decodeInventoryBlob` therefore lives in `items.js`, not `nbt.js`; `nbt.js` stays a pure parsing leaf and exports `NbtReader`, `decodeBase64`, `decompressGzip` to `items.js`. `market.js` and route files consume `decodeInventoryBlob` from `items.js`.
 
 ## Behavior invariants
 

@@ -106,15 +106,17 @@ git commit -m "refactor(worker): extract http module" -m "Co-Authored-By: Claude
 
 **Interfaces:**
 - Consumes: nothing (uses only web platform APIs: `atob`, `DecompressionStream`, `DataView`).
-- Produces: `export async function decodeInventoryBlob(blob)` returning `{ records, error }`; `NbtReader`, `decodeBase64`, `decompressGzip` move too but stay unexported unless a later task's test run proves another module references them directly.
+- Produces: `export class NbtReader`, `export function decodeBase64(value)`, `export async function decompressGzip(bytes)`. **`decodeInventoryBlob` does NOT move in this task** — it calls `compactNbtItem` (Task 6 material), so it stays in `src/worker.js` until Task 6 moves both into `src/items.js` together (see the spec's Task 3 amendment).
 
-- [ ] **Step 1: Create `src/nbt.js`** — move verbatim: `decodeInventoryBlob` (2509–2532, prepend `export`), `decodeBase64` (2533–2543), `decompressGzip` (2544–2555), `class NbtReader` (2671–2829). No imports.
+- [ ] **Step 1: Create `src/nbt.js`** — move verbatim, prepending `export` to all three: `decodeBase64` (2533–2543), `decompressGzip` (2544–2555), `class NbtReader` (2671–2829). No imports.
 
 - [ ] **Step 2: Wire `src/worker.js`** — add:
 
 ```js
-import { decodeInventoryBlob } from "./nbt.js";
+import { decodeBase64, decompressGzip, NbtReader } from "./nbt.js";
 ```
+
+(`decodeInventoryBlob`, still in `src/worker.js`, now resolves those three names through this import.)
 
 - [ ] **Step 3: Verify** — Run: `node --check src/nbt.js && npm test && npm run deploy:dry`. Expected: exit 0. The worker suite exercises NBT decode via the `talisman_bag` fixture, so a broken move fails here.
 
@@ -224,13 +226,13 @@ git commit -m "refactor(worker): extract hypixel upstream module" -m "Co-Authore
 - Modify: `src/worker.js`
 
 **Interfaces:**
-- Consumes: `decodeInventoryBlob` from `./nbt.js`; helpers from `./util.js` as referenced (at minimum `optionalNumber`/`stringOrNull`-class helpers — add exactly what the moved code names).
-- Produces: `export async function compactAccessories(member)`, `export async function compactGear(member)`, `export function findNbtContainers(member)`, `findSacksCounts(member)`, `isNbtBlob(value)`, `containerMetadata(container)`, `inventoryContainerKind(path)`, `inventoryContainerLabel(path)`, `compactNbtItem(item, fallbackSlot)`, `expandNbtItem(record)`, `cleanItemName(value)`, `formatItemId(value)`. Internal unless referenced elsewhere: `inferArmorSlot`, `inferEquipmentCategory`, `flattenTextComponent`.
+- Consumes: `decodeBase64`, `decompressGzip`, `NbtReader` from `./nbt.js`; helpers from `./util.js` as referenced (at minimum `optionalNumber`/`stringOrNull`-class helpers — add exactly what the moved code names).
+- Produces: `export async function decodeInventoryBlob(blob)` returning `{ present, items, records, error }`, `export async function compactAccessories(member)`, `export async function compactGear(member)`, `export function findNbtContainers(member)`, `findSacksCounts(member)`, `isNbtBlob(value)`, `containerMetadata(container)`, `inventoryContainerKind(path)`, `inventoryContainerLabel(path)`, `compactNbtItem(item, fallbackSlot)`, `expandNbtItem(record)`, `cleanItemName(value)`, `formatItemId(value)`. Internal unless referenced elsewhere: `inferArmorSlot`, `inferEquipmentCategory`, `flattenTextComponent`.
 
-- [ ] **Step 1: Create `src/items.js`** — move verbatim: `compactAccessories` (2308–2348), `findNbtContainers` (2349–2388), `findSacksCounts` (2389–2401), `isNbtBlob` (2402–2408), `containerMetadata` (2409–2418), `inventoryContainerKind` (2419–2437), `inventoryContainerLabel` (2438–2460), `compactGear` (2461–2508), `compactNbtItem` (2556–2590), `expandNbtItem` (2591–2613), `inferArmorSlot` (2614–2623), `inferEquipmentCategory` (2624–2633), `cleanItemName` (2634–2649), `flattenTextComponent` (2650–2656), `formatItemId` (2657–2666). Start imports from:
+- [ ] **Step 1: Create `src/items.js`** — move verbatim: `decodeInventoryBlob` (2509–2532, per the spec's Task 3 amendment it moves here, not to `nbt.js`), `compactAccessories` (2308–2348), `findNbtContainers` (2349–2388), `findSacksCounts` (2389–2401), `isNbtBlob` (2402–2408), `containerMetadata` (2409–2418), `inventoryContainerKind` (2419–2437), `inventoryContainerLabel` (2438–2460), `compactGear` (2461–2508), `compactNbtItem` (2556–2590), `expandNbtItem` (2591–2613), `inferArmorSlot` (2614–2623), `inferEquipmentCategory` (2624–2633), `cleanItemName` (2634–2649), `flattenTextComponent` (2650–2656), `formatItemId` (2657–2666). Start imports from:
 
 ```js
-import { decodeInventoryBlob } from "./nbt.js";
+import { decodeBase64, decompressGzip, NbtReader } from "./nbt.js";
 ```
 
 and add the exact `./util.js` names the moved bodies reference.
@@ -244,6 +246,7 @@ import {
   compactGear,
   compactNbtItem,
   containerMetadata,
+  decodeInventoryBlob,
   expandNbtItem,
   findNbtContainers,
   findSacksCounts,
@@ -254,7 +257,7 @@ import {
 } from "./items.js";
 ```
 
-Trim names with no remaining reference.
+Trim names with no remaining reference. Also delete the `import { decodeBase64, decompressGzip, NbtReader } from "./nbt.js";` line from `src/worker.js` — its only consumer (`decodeInventoryBlob`) just moved to `src/items.js`.
 
 - [ ] **Step 3: Verify** — Run: `node --check src/items.js && npm test && npm run deploy:dry`. Expected: exit 0; accessory/inventory fixtures cover these moves.
 
@@ -313,14 +316,13 @@ git commit -m "refactor(worker): extract sections module" -m "Co-Authored-By: Cl
 - Modify: `src/worker.js`
 
 **Interfaces:**
-- Consumes: `decodeInventoryBlob` from `./nbt.js`; `expandNbtItem`, `cleanItemName` from `./items.js`; `sanitize`, `optionalNumber` (plus any other referenced helpers) from `./util.js`.
+- Consumes: `decodeInventoryBlob`, `expandNbtItem`, `cleanItemName` from `./items.js` (per the spec's Task 3 amendment, `decodeInventoryBlob` lives in `items.js`); `sanitize`, `optionalNumber` (plus any other referenced helpers) from `./util.js`.
 - Produces: `export function compactBazaarProduct(product, itemNames)`, `compareBazaarProducts(left, right, sort, order)`, `export async function compactAuction(auction, full = false)`, `compactEndedAuction(auction, full = false)`, `export function resolveSkyBlockItem(itemNames, requested)`, `normalizeItemSearchText(value)`, `skyBlockItemIdsMatch(left, right)`, `auctionPrice(auction)`, `binPrice(auction)`.
 
 - [ ] **Step 1: Create `src/market.js`** — move verbatim: `compactBazaarProduct` (1181–1205), `compareBazaarProducts` (1206–1225), `compactAuction` (1238–1275), `resolveSkyBlockItem` (1276–1291), `normalizeItemSearchText` (1292–1299), `skyBlockItemIdsMatch` (1300–1304), `compactEndedAuction` (1305–1325), `auctionPrice` (1326–1331), `binPrice` (1332–1335). Start imports from:
 
 ```js
-import { cleanItemName, expandNbtItem } from "./items.js";
-import { decodeInventoryBlob } from "./nbt.js";
+import { cleanItemName, decodeInventoryBlob, expandNbtItem } from "./items.js";
 import { optionalNumber, sanitize } from "./util.js";
 ```
 
@@ -340,7 +342,7 @@ import {
 } from "./market.js";
 ```
 
-Trim unreferenced names; trim the worker's `./items.js`/`./nbt.js` imports if this move removed their last worker-side usage.
+Trim unreferenced names; trim the worker's `./items.js` import if this move removed any name's last worker-side usage (no `./nbt.js` import exists in `src/worker.js` by this point).
 
 - [ ] **Step 3: Verify** — Run: `node --check src/market.js && npm test && npm run deploy:dry`. Expected: exit 0; bazaar/lowest-BIN fixtures cover this move.
 
@@ -402,7 +404,7 @@ git commit -m "refactor(worker): extract profiles module" -m "Co-Authored-By: Cl
 - Modify: `src/worker.js`
 
 **Interfaces:**
-- Consumes: everything the handler bodies reference, imported with `../` prefixes (`../params.js`, `../profiles.js`, `../sections.js`, `../items.js`, `../hypixel.js`, `../http.js`, `../util.js`, `../nbt.js`).
+- Consumes: everything the handler bodies reference, imported with `../` prefixes (`../params.js`, `../profiles.js`, `../sections.js`, `../items.js`, `../hypixel.js`, `../http.js`, `../util.js`).
 - Produces (all `export async function name(url, env)`):
   - `routes/player.js`: `handleProfiles`, `handleSummary`, `handleSection`, `handlePlayerCollections`, `handlePlayerAccessories`, `handleSacks`, `handlePlayerExtra`. Internal: `EXTRA_KINDS` (line 6), `compareSackItems` (1226–1237).
   - `routes/inventory.js`: `handleInventoryIndex`, `handleInventoryContainer`, `handleInventoryItem`.
