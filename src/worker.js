@@ -1,3 +1,17 @@
+import {
+  firstNumber,
+  isoFromUnixMs,
+  normalizeUnixMilliseconds,
+  number,
+  objectOrEmpty,
+  optionalNumber,
+  paginateRecords,
+  pick,
+  round,
+  sanitize,
+  stringOrNull,
+} from "./util.js";
+
 const UUID_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 const GENERIC_UUID_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i;
 const ITEM_TAG_PATTERN = /^[A-Za-z0-9_:+;.-]{1,120}$/;
@@ -1333,14 +1347,6 @@ function binPrice(auction) {
   return number(auction?.starting_bid);
 }
 
-async function mapInBatches(values, batchSize, mapper) {
-  const results = [];
-  for (let index = 0; index < values.length; index += batchSize) {
-    results.push(...await Promise.all(values.slice(index, index + batchSize).map(mapper)));
-  }
-  return results;
-}
-
 async function loadSelectedMember(url, env) {
   const uuid = requireUuid(url);
   const selector = cleanSelector(url.searchParams.get("profile"));
@@ -1404,20 +1410,6 @@ function requireItemTag(url, name) {
     throw new ClientError(`${name} must be a valid SkyBlock item or product ID.`, 400);
   }
   return value;
-}
-
-function paginateRecords(records, page, limit) {
-  const totalItems = records.length;
-  const totalPages = totalItems ? Math.ceil(totalItems / limit) : 0;
-  const start = page * limit;
-  return {
-    page,
-    limit,
-    total_items: totalItems,
-    total_pages: totalPages,
-    has_more: start + limit < totalItems,
-    items: records.slice(start, start + limit),
-  };
 }
 
 function requireUuid(url) {
@@ -2035,22 +2027,6 @@ function compactForgeProcess(process, path, checkedAt) {
   };
 }
 
-function normalizeUnixMilliseconds(value) {
-  const timestamp = optionalNumber(value);
-  if (timestamp === null || timestamp < 0) return null;
-  return timestamp < 100_000_000_000 ? timestamp * 1_000 : timestamp;
-}
-
-function isoFromUnixMs(value) {
-  const timestamp = optionalNumber(value);
-  if (timestamp === null || timestamp < 0 || timestamp > 8_640_000_000_000_000) return null;
-  try {
-    return new Date(timestamp).toISOString();
-  } catch {
-    return null;
-  }
-}
-
 function compactForaging(member) {
   const core = objectOrEmpty(member?.foraging_core || member?.foraging);
   const skillTree = objectOrEmpty(member?.skill_tree);
@@ -2224,27 +2200,10 @@ function filterNumericStats(stats, pattern, limit = 160) {
   return result;
 }
 
-function objectOrEmpty(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
 function readTreeScopedValue(skillTree, key, scope) {
   const value = skillTree?.[key];
   if (value && typeof value === "object" && !Array.isArray(value)) return value[scope];
   return value;
-}
-
-function firstNumber(...values) {
-  for (const value of values) {
-    const converted = optionalNumber(value);
-    if (converted !== null) return converted;
-  }
-  return null;
-}
-
-function round(value, digits = 2) {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
 }
 
 function compactSlayers(member) {
@@ -2664,10 +2623,6 @@ function formatItemId(value) {
     .join(" ");
 }
 
-function stringOrNull(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 class NbtReader {
   constructor(bytes) {
     if (!(bytes instanceof Uint8Array)) throw new Error("NBT input was not binary data.");
@@ -2851,43 +2806,6 @@ function cleanSelector(value) {
 
 function normalizeUuid(value) {
   return String(value || "").replaceAll("-", "").toLowerCase();
-}
-
-function pick(object, keys) {
-  const result = {};
-  for (const key of keys) {
-    if (object && object[key] !== undefined) result[key] = object[key];
-  }
-  return sanitize(result, 5, 300);
-}
-
-function sanitize(value, depth = 5, maxEntries = 300) {
-  if (value === null || value === undefined) return value ?? null;
-  if (depth <= 0) return "[omitted]";
-  if (["string", "number", "boolean"].includes(typeof value)) {
-    return typeof value === "string" && value.length > 2_000 ? `${value.slice(0, 2_000)}…` : value;
-  }
-  if (Array.isArray(value)) {
-    return value.slice(0, Math.min(maxEntries, 250)).map((item) => sanitize(item, depth - 1, maxEntries));
-  }
-  if (typeof value === "object") {
-    const result = {};
-    for (const [key, item] of Object.entries(value).slice(0, maxEntries)) {
-      result[key] = sanitize(item, depth - 1, maxEntries);
-    }
-    return result;
-  }
-  return String(value);
-}
-
-function optionalNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const converted = Number(value);
-  return Number.isFinite(converted) ? converted : null;
-}
-
-function number(value) {
-  return optionalNumber(value) ?? 0;
 }
 
 async function secretsMatch(left, right) {
