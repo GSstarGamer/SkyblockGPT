@@ -16,6 +16,10 @@ Updating the Custom GPT's Instructions or Action schemas is still manual. OpenAI
 ## Repository layout
 
 ```text
+AGENTS.md                             Codex and repository-wide agent rules
+CLAUDE.md                             Claude Code entry point
+docs/PROJECT_CONTEXT.md               Product, architecture, API, and invariants
+docs/CHANGE_PLAYBOOK.md               Per-change implementation/sync checklist
 src/worker.js                         Cloudflare Worker
 actions/hypixel-worker.openapi.json  Hypixel/Worker Custom GPT Action
 actions/minecraft-username.openapi.json
@@ -29,6 +33,16 @@ scripts/test-worker.mjs              Mocked Worker integration tests
 .github/workflows/release.yml        Tagged release ZIPs
 wrangler.jsonc                       Cloudflare Worker configuration
 ```
+
+## Using Codex or Claude Code
+
+The repository includes durable context so a new coding-agent chat does not need this project's original conversation history:
+
+- Codex reads [`AGENTS.md`](AGENTS.md).
+- Claude Code reads [`CLAUDE.md`](CLAUDE.md), which directs it to the same authoritative rules.
+- Both use [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) for architecture and product intent and [`docs/CHANGE_PLAYBOOK.md`](docs/CHANGE_PLAYBOOK.md) for the exact change/test/deployment workflow.
+
+Start a task with the outcome you want, for example: “Add a compact endpoint for X, update the Action and tests, run validation, and tell me whether I need to update the GPT Builder.” The agent should inspect these context files before editing.
 
 ## One-time local setup
 
@@ -171,4 +185,3 @@ For a GPT configuration regression, use the GPT editor's version history. Action
 Never paste tokens into an issue, commit, pull request, Actions log, OpenAPI file, or GPT conversation.
 
 Creator contact: Discord `gs._`.
-
