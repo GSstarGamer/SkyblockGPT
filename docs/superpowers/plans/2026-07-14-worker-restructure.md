@@ -362,27 +362,27 @@ git commit -m "refactor(worker): extract market module" -m "Co-Authored-By: Clau
 - Modify: `src/worker.js`
 
 **Interfaces:**
-- Consumes: `fetchProfiles` from `./hypixel.js`; `compactSkills` from `./sections.js`; `requireUuid`, `cleanSelector`, `readTextParameter` (as referenced by `loadSelectedMember`) from `./params.js`; `./util.js` helpers as referenced.
-- Produces: `export async function loadSelectedMember(url, env)`, `export function selectProfile(profiles, uuid, selector)`, `compactProfile(profile, uuid)`, `buildOverview(profile, member, skillResource = null)`, `getMember(profile, uuid)`, `isDeleted(member)`.
+- Consumes: `fetchProfiles` from `./hypixel.js`; `requireUuid`, `cleanSelector`, `readTextParameter` (as referenced by `loadSelectedMember`) from `./params.js`; `./util.js` helpers as referenced. (`buildOverview` is NOT here — the Task 7 amendment moved it into `src/sections.js` because `buildSection`'s `"overview"` case calls it.)
+- Produces: `export async function loadSelectedMember(url, env)`, `export function selectProfile(profiles, uuid, selector)`, `compactProfile(profile, uuid)`, `getMember(profile, uuid)`, `isDeleted(member)`.
 
-- [ ] **Step 1: Create `src/profiles.js`** — move verbatim: `loadSelectedMember` (1344–1353), `selectProfile` (1575–1600), `compactProfile` (1601–1617), `buildOverview` (1618–1669), `getMember` (2830–2840), `isDeleted` (2841–2844). Add exactly the imports the bodies reference, starting from:
+- [ ] **Step 1: Create `src/profiles.js`** — move verbatim: `loadSelectedMember` (1344–1353), `selectProfile` (1575–1600), `compactProfile` (1601–1617), `getMember` (2830–2840), `isDeleted` (2841–2844). (`buildOverview` already lives in `src/sections.js` — do not touch it.) Add exactly the imports the bodies reference, starting from:
 
 ```js
 import { fetchProfiles } from "./hypixel.js";
-import { compactSkills } from "./sections.js";
 ```
 
 - [ ] **Step 2: Wire `src/worker.js`** — add:
 
 ```js
 import {
-  buildOverview,
   compactProfile,
   getMember,
   loadSelectedMember,
   selectProfile,
 } from "./profiles.js";
 ```
+
+(`buildOverview` stays imported from `./sections.js` where Task 7 wired it.)
 
 Trim unreferenced names and any now-dead worker imports (e.g. `fetchProfiles`, `cleanSelector` if handlers no longer call them directly).
 
