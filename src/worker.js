@@ -23,6 +23,27 @@ import {
 } from "./routes/market.js";
 import { handleFeed, handleResources } from "./routes/misc.js";
 
+const ROUTES = new Map([
+  ["/v1/player/profiles", handleProfiles],
+  ["/v1/player/summary", handleSummary],
+  ["/v1/player/section", handleSection],
+  ["/v1/player/collections", handlePlayerCollections],
+  ["/v1/player/accessories", handlePlayerAccessories],
+  ["/v1/player/inventories", handleInventoryIndex],
+  ["/v1/player/inventory", handleInventoryContainer],
+  ["/v1/player/item", handleInventoryItem],
+  ["/v1/player/sacks", handleSacks],
+  ["/v1/player/extra", handlePlayerExtra],
+  ["/v1/resources", handleResources],
+  ["/v1/feed", handleFeed],
+  ["/v1/bazaar/products", handleBazaarProducts],
+  ["/v1/bazaar/product", handleBazaarProduct],
+  ["/v1/auctions/page", handleAuctionPage],
+  ["/v1/auctions/lowest-bin", handleLowestBin],
+  ["/v1/auctions/lookup", handleAuctionLookup],
+  ["/v1/auctions/ended", handleEndedAuctions],
+]);
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -65,79 +86,11 @@ export default {
     }
 
     try {
-      if (url.pathname === "/v1/player/profiles") {
-        return await handleProfiles(url, env);
+      const handler = ROUTES.get(url.pathname);
+      if (!handler) {
+        return json({ success: false, error: "Route not found." }, 404);
       }
-
-      if (url.pathname === "/v1/player/summary") {
-        return await handleSummary(url, env);
-      }
-
-      if (url.pathname === "/v1/player/section") {
-        return await handleSection(url, env);
-      }
-
-      if (url.pathname === "/v1/player/collections") {
-        return await handlePlayerCollections(url, env);
-      }
-
-      if (url.pathname === "/v1/player/accessories") {
-        return await handlePlayerAccessories(url, env);
-      }
-
-      if (url.pathname === "/v1/player/inventories") {
-        return await handleInventoryIndex(url, env);
-      }
-
-      if (url.pathname === "/v1/player/inventory") {
-        return await handleInventoryContainer(url, env);
-      }
-
-      if (url.pathname === "/v1/player/item") {
-        return await handleInventoryItem(url, env);
-      }
-
-      if (url.pathname === "/v1/player/sacks") {
-        return await handleSacks(url, env);
-      }
-
-      if (url.pathname === "/v1/player/extra") {
-        return await handlePlayerExtra(url, env);
-      }
-
-      if (url.pathname === "/v1/resources") {
-        return await handleResources(url, env);
-      }
-
-      if (url.pathname === "/v1/feed") {
-        return await handleFeed(url, env);
-      }
-
-      if (url.pathname === "/v1/bazaar/products") {
-        return await handleBazaarProducts(url, env);
-      }
-
-      if (url.pathname === "/v1/bazaar/product") {
-        return await handleBazaarProduct(url, env);
-      }
-
-      if (url.pathname === "/v1/auctions/page") {
-        return await handleAuctionPage(url, env);
-      }
-
-      if (url.pathname === "/v1/auctions/lowest-bin") {
-        return await handleLowestBin(url, env);
-      }
-
-      if (url.pathname === "/v1/auctions/lookup") {
-        return await handleAuctionLookup(url, env);
-      }
-
-      if (url.pathname === "/v1/auctions/ended") {
-        return await handleEndedAuctions(url, env);
-      }
-
-      return json({ success: false, error: "Route not found." }, 404);
+      return await handler(url, env);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unexpected proxy error.";
       const status = error instanceof ClientError || error instanceof UpstreamError ? error.status : 500;
