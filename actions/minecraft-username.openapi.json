@@ -1,0 +1,67 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Minecraft Username Lookup",
+    "description": "Resolve a current Minecraft Java username to its permanent UUID before making player-specific SkyBlock requests.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.minecraftservices.com"
+    }
+  ],
+  "paths": {
+    "/minecraft/profile/lookup/name/{username}": {
+      "get": {
+        "operationId": "lookupMinecraftProfileByName",
+        "summary": "Resolve a Minecraft username",
+        "description": "Returns the current Minecraft Java username and permanent UUID for a valid username. Use the returned id as the UUID in player-specific Hypixel SkyBlock requests.",
+        "x-openai-isConsequential": false,
+        "security": [],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "Current Minecraft Java username",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 16,
+              "pattern": "^[A-Za-z0-9_]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Minecraft profile found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Permanent undashed Minecraft UUID"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Current Minecraft username"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No Minecraft profile exists for that username"
+          }
+        }
+      }
+    }
+  }
+}

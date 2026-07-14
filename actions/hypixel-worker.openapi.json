@@ -1,0 +1,1596 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SkyblockGPT Unified Data Gateway",
+    "description": "One compact gateway for Hypixel SkyBlock profiles, inventories, sack counts, resources, Bazaar, auctions, lowest BIN scans, feeds, and player extras.",
+    "version": "2.5.0"
+  },
+  "servers": [
+    {
+      "url": "https://skyblock-gpt-proxy.girishsonic8.workers.dev"
+    }
+  ],
+  "paths": {
+    "/v1/player/profiles": {
+      "get": {
+        "operationId": "getCompactSkyBlockProfiles",
+        "summary": "List a player's compact SkyBlock profiles",
+        "description": "Lists profile IDs, cute names, selected state, last save, game mode, and SkyBlock level without returning the full profile payload.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID returned by the username lookup action.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact profile list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactProfilesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "security": [
+          {
+            "ProxyApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/player/summary": {
+      "get": {
+        "operationId": "getCompactSkyBlockProfileSummary",
+        "summary": "Get a compact SkyBlock profile summary",
+        "description": "Returns profile identity, SkyBlock level, currencies, fairy souls, calculated skill levels, Slayer data, and a compact Dungeons summary.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID returned by the username lookup action.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name. Omit it to use the selected or most recently saved profile.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact profile summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactDataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "security": [
+          {
+            "ProxyApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/player/section": {
+      "get": {
+        "operationId": "getCompactSkyBlockProfileSection",
+        "summary": "Get one compact SkyBlock profile section",
+        "description": "Returns one compact profile section, including HotM/HotF, Forge processes, skills, counters, gear, and other progression data.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID returned by the username lookup action.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name. Omit it to use the selected or most recently saved profile.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": true,
+            "description": "The profile-data section needed for the current question.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "overview",
+                "skills",
+                "slayers",
+                "dungeons",
+                "collections",
+                "mining",
+                "forge",
+                "foraging",
+                "stats",
+                "gear",
+                "pets",
+                "accessories",
+                "bestiary",
+                "rift"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested compact profile section",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactDataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "security": [
+          {
+            "ProxyApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/player/collections": {
+      "get": {
+        "operationId": "getTypedSkyBlockPlayerCollections",
+        "summary": "Read typed player collection progress",
+        "description": "Returns paginated player collection amounts with official achieved tiers, next-tier requirements, and optional unlocked reward text.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID returned by the username lookup action.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name. Omit it to use the selected or most recently saved profile.",
+            "schema": { "type": "string", "maxLength": 64 }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional collection ID, display name, or category search.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Collection entries per response.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+          },
+          {
+            "name": "include_unlocks",
+            "in": "query",
+            "required": false,
+            "description": "Include official reward text for every achieved tier and the next tier. Use only when recipes or unlocks matter.",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Typed collection progress payload",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlayerCollectionsResponse" } } }
+          },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/player/accessories": {
+      "get": {
+        "operationId": "getTypedSkyBlockAccessories",
+        "summary": "Read typed Accessory Bag contents",
+        "description": "Decodes and paginates the Accessory Bag with item IDs, names, slots, reforges, upgrades, unique counts, and exact duplicate IDs.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID returned by the username lookup action.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name. Omit it to use the selected or most recently saved profile.",
+            "schema": { "type": "string", "maxLength": 64 }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact or partial accessory item ID or display-name search.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Accessories per response.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Typed Accessory Bag payload",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlayerAccessoriesResponse" } } }
+          },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/player/inventories": {
+      "get": {
+        "operationId": "getCompactSkyBlockInventoryIndex",
+        "summary": "List every available compressed item container",
+        "description": "Discovers NBT item containers and reports whether numeric sack contents are available without returning oversized inventory data.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available NBT item-container index",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactDataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "security": [
+          {
+            "ProxyApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/player/inventory": {
+      "get": {
+        "operationId": "getCompactSkyBlockInventoryContainer",
+        "summary": "Read one paginated item container",
+        "description": "Decodes one container returned by the inventory index. Summary supports up to 50 items per page; full data is capped at 5 items per page.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "container",
+            "in": "query",
+            "required": true,
+            "description": "Exact container ID returned by getCompactSkyBlockInventoryIndex.",
+            "schema": {
+              "type": "string",
+              "maxLength": 240
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based results page.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Requested items per page. Full detail is capped at 5.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 25
+            }
+          },
+          {
+            "name": "detail",
+            "in": "query",
+            "required": false,
+            "description": "Use summary for lists or full for lore, ExtraAttributes, and parsed NBT.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "full"
+              ],
+              "default": "summary"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Decoded paginated item container",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactDataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "security": [
+          {
+            "ProxyApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/player/item": {
+      "get": {
+        "operationId": "getCompactSkyBlockInventoryItem",
+        "summary": "Read full parsed data for one item slot",
+        "description": "Returns one item's name, ID, lore, enchantments, attributes, ExtraAttributes, and parsed NBT from a discovered container and slot.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "container",
+            "in": "query",
+            "required": true,
+            "description": "Exact container ID returned by getCompactSkyBlockInventoryIndex.",
+            "schema": {
+              "type": "string",
+              "maxLength": 240
+            }
+          },
+          {
+            "name": "slot",
+            "in": "query",
+            "required": true,
+            "description": "Exact item slot returned by the container endpoint.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full decoded item data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactDataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "security": [
+          {
+            "ProxyApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/player/sacks": {
+      "get": {
+        "operationId": "getCompactSkyBlockSacks",
+        "summary": "Read item quantities stored in sacks",
+        "description": "Returns the selected member's positive sacks_counts entries with official item names, search, sorting, and pagination. This reads quantities, not merely owned Sack items.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID.",
+            "schema": { "type": "string", "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$" }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact profile ID or cute name.",
+            "schema": { "type": "string", "maxLength": 64 }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional item ID or name search within sack contents.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Sack item counts per response.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Field used to sort matching sack entries.",
+            "schema": { "type": "string", "enum": ["quantity", "item_id", "name"], "default": "quantity" }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "description": "Ascending or descending sort direction.",
+            "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Typed sack item quantities", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlayerSacksResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/player/extra": {
+      "get": {
+        "operationId": "getCompactSkyBlockPlayerExtra",
+        "summary": "Read Museum, Garden, or Bingo data",
+        "description": "Returns a response-size-safe Museum inventory, Garden state, or player Bingo history. Museum entries are searchable and paginated.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "description": "The player's dashed or undashed Minecraft UUID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "Optional profile ID or cute name for Museum or Garden.",
+            "schema": { "type": "string", "maxLength": 64 }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "description": "The player-specific dataset to retrieve.",
+            "schema": { "type": "string", "enum": ["museum", "garden", "bingo"] }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional Museum item search text.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based Museum result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Museum entries per page.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 40, "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Compact player-specific dataset", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenericDataResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/resources": {
+      "get": {
+        "operationId": "getCompactSkyBlockResource",
+        "summary": "Search official SkyBlock resources",
+        "description": "Searches and pages Collections, Skills, or Items, or returns current Election and Bingo resources without exposing oversized raw responses.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "description": "The official Hypixel resource dataset.",
+            "schema": { "type": "string", "enum": ["collections", "skills", "items", "election", "bingo"] }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional item, collection, or skill ID/name search.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Results per page.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 }
+          },
+          {
+            "name": "detail",
+            "in": "query",
+            "required": false,
+            "description": "Summary for lists or full for every available resource field.",
+            "schema": { "type": "string", "enum": ["summary", "full"], "default": "summary" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Compact official resource data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResourceDataResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/feed": {
+      "get": {
+        "operationId": "getCompactSkyBlockFeed",
+        "summary": "Read SkyBlock news or Fire Sales",
+        "description": "Returns current official SkyBlock news entries or active and upcoming Fire Sales through the Worker.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "description": "The live feed to retrieve.",
+            "schema": { "type": "string", "enum": ["news", "firesales"] }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Current feed data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenericDataResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/bazaar/products": {
+      "get": {
+        "operationId": "searchCompactSkyBlockBazaarProducts",
+        "summary": "Search and rank all Bazaar products",
+        "description": "Searches the complete current Hypixel Bazaar snapshot and returns compact prices, volumes, weekly movement, orders, spreads, and pagination.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional product ID or display-name search.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Products per page.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Field used to rank matching products.",
+            "schema": { "type": "string", "enum": ["product_id", "instant_buy", "instant_sell", "spread", "spread_percent", "buy_volume", "sell_volume", "moving_week"], "default": "product_id" }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "description": "Sort direction.",
+            "schema": { "type": "string", "enum": ["asc", "desc"], "default": "asc" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Typed searchable Bazaar snapshot", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BazaarProductsResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/bazaar/product": {
+      "get": {
+        "operationId": "getCompactSkyBlockBazaarProduct",
+        "summary": "Read one full Bazaar product",
+        "description": "Returns all current Hypixel data for one Bazaar product, including both order summaries, quick status, volumes, prices, orders, and calculated spread.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "product",
+            "in": "query",
+            "required": true,
+            "description": "Exact Bazaar product ID from the product-search operation.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 120 }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Typed current Bazaar product data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BazaarProductResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/auctions/page": {
+      "get": {
+        "operationId": "browseCompactSkyBlockAuctionPage",
+        "summary": "Browse one current Auction House page",
+        "description": "Filters and sorts one official active-auction page. Its page-scoped lowest BIN is not global; use the direct SkyCofl Action for normal LBin checks.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "upstream_page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based official Hypixel auction page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "result_page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based page within matches from that official page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Matching auctions per response; full detail is capped at five.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional item name, extra text, or auction UUID search within this official page.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact auction category filter.",
+            "schema": { "type": "string", "maxLength": 40 }
+          },
+          {
+            "name": "tier",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact rarity or tier filter.",
+            "schema": { "type": "string", "maxLength": 30 }
+          },
+          {
+            "name": "bin",
+            "in": "query",
+            "required": false,
+            "description": "Optional BIN-only or auction-only filter.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Keep source order, sort by ending time, or sort price ascending or descending. Omit for automatic BIN ascending order.",
+            "schema": { "type": "string", "enum": ["source", "ending", "price", "price_asc", "price_desc"] }
+          },
+          {
+            "name": "detail",
+            "in": "query",
+            "required": false,
+            "description": "Summary for browsing or full for lore, bids, and decoded item NBT.",
+            "schema": { "type": "string", "enum": ["summary", "full"], "default": "summary" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Compact active-auction page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenericDataResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/auctions/lowest-bin": {
+      "get": {
+        "operationId": "getLowestBinSkyBlockAuctions",
+        "summary": "Find the lowest BIN for an exact item",
+        "description": "Resource-safe fallback that scans up to 4 official AH pages and verifies exact item IDs from NBT. Prefer the direct SkyCofl lowest-BIN operation for normal price checks.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "description": "Exact official SkyBlock item ID or exact official item name.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 120 }
+          },
+          {
+            "name": "start_page",
+            "in": "query",
+            "required": false,
+            "description": "First official AH page to scan; begin with zero and continue from next_start_page only when required.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "max_pages",
+            "in": "query",
+            "required": false,
+            "description": "Maximum official AH pages scanned in this Action call.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 4, "default": 4 }
+          },
+          {
+            "name": "expected_last_updated",
+            "in": "query",
+            "required": false,
+            "description": "For continuation calls, pass the first segment's snapshot_last_updated value to reject mixed AH snapshots.",
+            "schema": { "type": "integer", "minimum": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Cheapest verified matching BIN auctions returned per scan segment.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 25, "default": 10 }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact Auction House category filter.",
+            "schema": { "type": "string", "maxLength": 40 }
+          },
+          {
+            "name": "tier",
+            "in": "query",
+            "required": false,
+            "description": "Optional exact rarity or tier filter.",
+            "schema": { "type": "string", "maxLength": 30 }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Verified lowest-BIN scan segment", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenericDataResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/auctions/lookup": {
+      "get": {
+        "operationId": "lookupCompactSkyBlockAuctions",
+        "summary": "Look up auctions by auction, player, or profile",
+        "description": "Looks up official auctions using exactly one auction UUID, player UUID, or profile UUID and returns paginated summaries or full decoded details.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": false,
+            "description": "Exact auction UUID. Do not combine with player or profile.",
+            "schema": { "type": "string", "maxLength": 64 }
+          },
+          {
+            "name": "player",
+            "in": "query",
+            "required": false,
+            "description": "Player UUID. Do not combine with uuid or profile.",
+            "schema": { "type": "string", "maxLength": 64 }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "SkyBlock profile UUID. Do not combine with uuid or player.",
+            "schema": { "type": "string", "maxLength": 64 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Results per page; full detail is capped at five.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+          },
+          {
+            "name": "detail",
+            "in": "query",
+            "required": false,
+            "description": "Summary or full auction data with decoded NBT.",
+            "schema": { "type": "string", "enum": ["summary", "full"], "default": "summary" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Compact auction lookup results", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenericDataResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    },
+    "/v1/auctions/ended": {
+      "get": {
+        "operationId": "getCompactSkyBlockEndedAuctions",
+        "summary": "Read recently ended auctions",
+        "description": "Returns compact, paginated auctions from Hypixel's recent-ended window with optional item-NBT decoding.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Optional auction or seller UUID search.",
+            "schema": { "type": "string", "maxLength": 100 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Results per page; full detail is capped at five.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 }
+          },
+          {
+            "name": "detail",
+            "in": "query",
+            "required": false,
+            "description": "Summary or full data with decoded sold-item NBT.",
+            "schema": { "type": "string", "enum": ["summary", "full"], "default": "summary" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Compact recently ended auctions", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenericDataResponse" } } } },
+          "default": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "security": [{ "ProxyApiKey": [] }]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ProxyApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-GPT-Key",
+        "description": "A private shared secret configured in both the Worker and the Custom GPT Action settings. This is not the Hypixel API key."
+      }
+    },
+    "responses": {
+      "ErrorResponse": {
+        "description": "Lookup or authentication error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "CompactProfilesResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompactProfile"
+            }
+          }
+        },
+        "required": [
+          "success",
+          "uuid",
+          "profiles"
+        ]
+      },
+      "CompactDataResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/CompactProfile"
+          },
+          "section": {
+            "type": "string"
+          },
+          "payload_kind": {
+            "type": "string"
+          },
+          "payload_version": {
+            "type": "string"
+          },
+          "data_present": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "success",
+          "uuid",
+          "profile",
+          "data"
+        ]
+      },
+      "CompactProfile": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cute_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selected": {
+            "type": "boolean"
+          },
+          "game_mode": {
+            "type": "string"
+          },
+          "player_is_member": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "last_save": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "skyblock_experience": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "skyblock_level": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "CollectionProgress": {
+        "type": "object",
+        "properties": {
+          "collection_id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "category_id": { "type": ["string", "null"] },
+          "category_name": { "type": ["string", "null"] },
+          "amount": { "type": "number" },
+          "achieved_tier": { "type": ["number", "null"] },
+          "max_tier": { "type": ["number", "null"] },
+          "next_tier": { "type": ["number", "null"] },
+          "next_tier_requirement": { "type": ["number", "null"] },
+          "amount_to_next_tier": { "type": ["number", "null"] },
+          "unlocked_rewards": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "next_tier_unlocks": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": [
+          "collection_id", "name", "category_id", "category_name", "amount", "achieved_tier", "max_tier",
+          "next_tier", "next_tier_requirement", "amount_to_next_tier", "unlocked_rewards", "next_tier_unlocks"
+        ]
+      },
+      "PlayerCollectionsData": {
+        "type": "object",
+        "properties": {
+          "payload_kind": { "type": "string", "const": "player_collections" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "available": { "type": "boolean" },
+          "collection_api_present": { "type": "boolean" },
+          "resource_metadata_available": { "type": "boolean" },
+          "source_last_updated": { "type": ["number", "null"] },
+          "source_version": { "type": ["string", "null"] },
+          "unlocks_included": { "type": "boolean" },
+          "query": { "type": ["string", "null"] },
+          "total_distinct_collections": { "type": "integer" },
+          "total_collected": { "type": "number" },
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total_items": { "type": "integer" },
+          "total_pages": { "type": "integer" },
+          "has_more": { "type": "boolean" },
+          "collections": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CollectionProgress" }
+          },
+          "reason": { "type": ["string", "null"] }
+        },
+        "required": [
+          "payload_kind", "payload_version", "data_present", "available", "collection_api_present",
+          "resource_metadata_available", "source_last_updated", "source_version", "unlocks_included", "query",
+          "total_distinct_collections", "total_collected", "page", "limit", "total_items", "total_pages",
+          "has_more", "collections", "reason"
+        ]
+      },
+      "PlayerCollectionsResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "uuid": { "type": "string" },
+          "profile": { "$ref": "#/components/schemas/CompactProfile" },
+          "payload_kind": { "type": "string", "const": "player_collections" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/PlayerCollectionsData" }
+        },
+        "required": ["success", "uuid", "profile", "payload_kind", "payload_version", "data_present", "data"]
+      },
+      "ContainerMetadata": {
+        "type": ["object", "null"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "kind": { "type": "string" },
+          "encoded_bytes_estimate": { "type": "integer" }
+        },
+        "required": ["id", "label", "kind", "encoded_bytes_estimate"]
+      },
+      "NbtItemSummary": {
+        "type": "object",
+        "properties": {
+          "slot": { "type": "number" },
+          "name": { "type": "string" },
+          "skyblock_id": { "type": ["string", "null"] },
+          "count": { "type": "number" },
+          "reforge": { "type": ["string", "null"] },
+          "stars": { "type": ["number", "null"] },
+          "recombobulated": { "type": "boolean" },
+          "attributes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "enchantments": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["slot", "name", "skyblock_id", "count", "reforge", "stars", "recombobulated", "attributes", "enchantments"]
+      },
+      "DuplicateItem": {
+        "type": "object",
+        "properties": {
+          "item_id": { "type": "string" },
+          "count": { "type": "integer" }
+        },
+        "required": ["item_id", "count"]
+      },
+      "PlayerAccessoriesData": {
+        "type": "object",
+        "properties": {
+          "payload_kind": { "type": "string", "const": "player_accessories" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "available": { "type": "boolean" },
+          "accessory_bag_api_present": { "type": "boolean" },
+          "container": { "$ref": "#/components/schemas/ContainerMetadata" },
+          "highest_magical_power": { "type": ["number", "null"] },
+          "reported_magical_power": { "type": ["number", "null"] },
+          "selected_power": { "type": ["string", "null"] },
+          "tuning": { "type": "object", "additionalProperties": true },
+          "bag_settings": { "type": "object", "additionalProperties": true },
+          "total_accessories": { "type": "integer" },
+          "unique_item_ids": { "type": "integer" },
+          "duplicate_items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DuplicateItem" }
+          },
+          "query": { "type": ["string", "null"] },
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total_items": { "type": "integer" },
+          "total_pages": { "type": "integer" },
+          "has_more": { "type": "boolean" },
+          "accessories": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/NbtItemSummary" }
+          },
+          "reason": { "type": ["string", "null"] },
+          "decode_error": { "type": ["string", "null"] }
+        },
+        "required": [
+          "payload_kind", "payload_version", "data_present", "available", "accessory_bag_api_present", "container",
+          "highest_magical_power", "reported_magical_power", "selected_power", "tuning", "bag_settings",
+          "total_accessories", "unique_item_ids", "duplicate_items", "query", "page", "limit",
+          "total_items", "total_pages", "has_more", "accessories", "reason", "decode_error"
+        ]
+      },
+      "PlayerAccessoriesResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "uuid": { "type": "string" },
+          "profile": { "$ref": "#/components/schemas/CompactProfile" },
+          "payload_kind": { "type": "string", "const": "player_accessories" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/PlayerAccessoriesData" }
+        },
+        "required": ["success", "uuid", "profile", "payload_kind", "payload_version", "data_present", "data"]
+      },
+      "SackItem": {
+        "type": "object",
+        "properties": {
+          "item_id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "quantity": { "type": "number" }
+        },
+        "required": ["item_id", "name", "quantity"]
+      },
+      "PlayerSacksData": {
+        "type": "object",
+        "properties": {
+          "payload_kind": { "type": "string", "const": "player_sacks" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "available": { "type": "boolean" },
+          "sacks_api_present": { "type": "boolean" },
+          "query": { "type": ["string", "null"] },
+          "sort": { "type": "string" },
+          "order": { "type": "string" },
+          "total_distinct_items": { "type": "integer" },
+          "total_item_quantity": { "type": "number" },
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total_items": { "type": "integer" },
+          "total_pages": { "type": "integer" },
+          "has_more": { "type": "boolean" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SackItem" }
+          },
+          "reason": { "type": ["string", "null"] }
+        },
+        "required": [
+          "payload_kind", "payload_version", "data_present", "available", "sacks_api_present", "query", "sort",
+          "order", "total_distinct_items", "total_item_quantity", "page", "limit", "total_items", "total_pages",
+          "has_more", "items", "reason"
+        ]
+      },
+      "PlayerSacksResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "uuid": { "type": "string" },
+          "profile": { "$ref": "#/components/schemas/CompactProfile" },
+          "payload_kind": { "type": "string", "const": "player_sacks" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/PlayerSacksData" }
+        },
+        "required": ["success", "uuid", "profile", "payload_kind", "payload_version", "data_present", "data"]
+      },
+      "BazaarProductSummary": {
+        "type": "object",
+        "properties": {
+          "product_id": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "instant_buy_price": { "type": ["number", "null"] },
+          "instant_sell_price": { "type": ["number", "null"] },
+          "sell_offer_price": { "type": ["number", "null"] },
+          "buy_order_price": { "type": ["number", "null"] },
+          "spread": { "type": ["number", "null"] },
+          "spread_percent": { "type": ["number", "null"] },
+          "sell_volume": { "type": ["number", "null"] },
+          "buy_volume": { "type": ["number", "null"] },
+          "sell_moving_week": { "type": ["number", "null"] },
+          "buy_moving_week": { "type": ["number", "null"] },
+          "sell_orders": { "type": ["number", "null"] },
+          "buy_orders": { "type": ["number", "null"] }
+        },
+        "required": [
+          "product_id", "name", "instant_buy_price", "instant_sell_price", "sell_offer_price", "buy_order_price",
+          "spread", "spread_percent", "sell_volume", "buy_volume", "sell_moving_week", "buy_moving_week",
+          "sell_orders", "buy_orders"
+        ]
+      },
+      "BazaarProductsData": {
+        "type": "object",
+        "properties": {
+          "payload_kind": { "type": "string", "const": "bazaar_product_index" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "source": { "type": "string" },
+          "source_last_updated": { "type": ["number", "null"] },
+          "query": { "type": ["string", "null"] },
+          "sort": { "type": "string" },
+          "order": { "type": "string" },
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total_items": { "type": "integer" },
+          "total_pages": { "type": "integer" },
+          "has_more": { "type": "boolean" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BazaarProductSummary" }
+          }
+        },
+        "required": [
+          "payload_kind", "payload_version", "data_present", "source", "source_last_updated", "query", "sort",
+          "order", "page", "limit", "total_items", "total_pages", "has_more", "items"
+        ]
+      },
+      "BazaarProductsResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "payload_kind": { "type": "string", "const": "bazaar_product_index" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/BazaarProductsData" }
+        },
+        "required": ["success", "payload_kind", "payload_version", "data_present", "data"]
+      },
+      "BazaarOrderSummary": {
+        "type": "object",
+        "properties": {
+          "amount": { "type": "number" },
+          "pricePerUnit": { "type": "number" },
+          "orders": { "type": "number" }
+        },
+        "required": ["amount", "pricePerUnit", "orders"]
+      },
+      "BazaarQuickStatus": {
+        "type": "object",
+        "properties": {
+          "productId": { "type": "string" },
+          "sellPrice": { "type": "number" },
+          "sellVolume": { "type": "number" },
+          "sellMovingWeek": { "type": "number" },
+          "sellOrders": { "type": "number" },
+          "buyPrice": { "type": "number" },
+          "buyVolume": { "type": "number" },
+          "buyMovingWeek": { "type": "number" },
+          "buyOrders": { "type": "number" }
+        }
+      },
+      "BazaarProductDetail": {
+        "type": "object",
+        "properties": {
+          "payload_kind": { "type": "string", "const": "bazaar_product" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "source": { "type": "string" },
+          "source_last_updated": { "type": ["number", "null"] },
+          "product_id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "instant_buy_price": { "type": ["number", "null"] },
+          "instant_sell_price": { "type": ["number", "null"] },
+          "sell_offer_price": { "type": ["number", "null"] },
+          "buy_order_price": { "type": ["number", "null"] },
+          "spread": { "type": ["number", "null"] },
+          "spread_percent": { "type": ["number", "null"] },
+          "sell_volume": { "type": ["number", "null"] },
+          "buy_volume": { "type": ["number", "null"] },
+          "sell_moving_week": { "type": ["number", "null"] },
+          "buy_moving_week": { "type": ["number", "null"] },
+          "sell_orders": { "type": ["number", "null"] },
+          "buy_orders": { "type": ["number", "null"] },
+          "sell_summary": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BazaarOrderSummary" }
+          },
+          "buy_summary": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BazaarOrderSummary" }
+          },
+          "quick_status": { "$ref": "#/components/schemas/BazaarQuickStatus" }
+        },
+        "required": [
+          "payload_kind", "payload_version", "data_present", "source", "source_last_updated", "product_id", "name",
+          "instant_buy_price", "instant_sell_price", "sell_offer_price", "buy_order_price", "spread", "spread_percent",
+          "sell_volume", "buy_volume", "sell_moving_week", "buy_moving_week", "sell_orders", "buy_orders",
+          "sell_summary", "buy_summary", "quick_status"
+        ]
+      },
+      "BazaarProductResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "payload_kind": { "type": "string", "const": "bazaar_product" },
+          "payload_version": { "type": "string" },
+          "data_present": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/BazaarProductDetail" }
+        },
+        "required": ["success", "payload_kind", "payload_version", "data_present", "data"]
+      },
+      "ResourceCollectionTier": {
+        "type": "object",
+        "properties": {
+          "tier": { "type": "number" },
+          "amountRequired": { "type": "number" },
+          "unlocks": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": true
+      },
+      "ResourceRecord": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "category_id": { "type": ["string", "null"] },
+          "category_name": { "type": ["string", "null"] },
+          "category": { "type": ["string", "null"] },
+          "tier": { "type": ["string", "number", "null"] },
+          "maxTiers": { "type": ["number", "null"] },
+          "tiers": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ResourceCollectionTier" }
+          },
+          "stats": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
+      },
+      "ResourceData": {
+        "type": "object",
+        "properties": {
+          "source_last_updated": { "type": ["number", "null"] },
+          "source_version": { "type": ["string", "null"] },
+          "query": { "type": ["string", "null"] },
+          "detail": { "type": "string" },
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total_items": { "type": "integer" },
+          "total_pages": { "type": "integer" },
+          "has_more": { "type": "boolean" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ResourceRecord" }
+          }
+        },
+        "additionalProperties": true
+      },
+      "ResourceDataResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "kind": { "type": "string" },
+          "data": { "$ref": "#/components/schemas/ResourceData" }
+        },
+        "required": ["success", "kind", "data"]
+      },
+      "GenericDataResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "uuid": { "type": "string" },
+          "kind": { "type": "string" },
+          "profile": { "$ref": "#/components/schemas/CompactProfile" },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["success", "data"]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "error"
+        ]
+      }
+    }
+  }
+}

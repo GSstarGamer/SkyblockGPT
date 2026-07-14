@@ -1,0 +1,23 @@
+{
+  "name": "skyblockgpt",
+  "version": "12.3.0",
+  "private": true,
+  "description": "Source, Actions, tests, and Cloudflare deployment automation for SkyBlockGPT.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "test:worker": "node scripts/test-worker.mjs",
+    "test": "npm run validate && npm run test:worker",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:dry": "wrangler deploy --dry-run",
+    "release:zip": "node scripts/package-release.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.110.0"
+  }
+}
+

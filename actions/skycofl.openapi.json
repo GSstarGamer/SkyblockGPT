@@ -1,0 +1,897 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SkyCofl Market History",
+    "description": "Direct read-only SkyCofl access for Bazaar history, Auction House price history, lowest BINs, sold auctions, and focused market analysis.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://sky.coflnet.com"
+    }
+  ],
+  "security": [
+    {
+      "SkyCoflBearer": []
+    }
+  ],
+  "paths": {
+    "/api/bazaar/{itemTag}/snapshot": {
+      "get": {
+        "operationId": "getCoflBazaarSnapshot",
+        "summary": "Get a current Bazaar snapshot",
+        "description": "Returns current prices, volume, weekly movement, and order-book rows for one exact Bazaar item ID.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel item ID, such as BOOSTER_COOKIE or ENCHANTED_TITANIUM.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          },
+          {
+            "name": "timestamp",
+            "in": "query",
+            "required": false,
+            "description": "Optional ISO 8601 timestamp. Omit for the current snapshot.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bazaar snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BazaarSnapshot"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/bazaar/{itemTag}/history/hour": {
+      "get": {
+        "operationId": "getCoflBazaarHistoryHour",
+        "summary": "Get one hour of Bazaar history",
+        "description": "Returns the last hour of Bazaar history for one exact item ID at short intervals.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel Bazaar item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hourly Bazaar history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BazaarHistory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/bazaar/{itemTag}/history/day": {
+      "get": {
+        "operationId": "getCoflBazaarHistoryDay",
+        "summary": "Get one day of Bazaar history",
+        "description": "Returns the last day of Bazaar history for one exact item ID at five-minute intervals.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel Bazaar item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily Bazaar history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BazaarHistory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/bazaar/{itemTag}/history/week": {
+      "get": {
+        "operationId": "getCoflBazaarHistoryWeek",
+        "summary": "Get one week of Bazaar history",
+        "description": "Returns the last week of Bazaar history for one exact item ID at two-hour intervals.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel Bazaar item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Weekly Bazaar history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BazaarHistory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/bazaar/{itemTag}/history": {
+      "get": {
+        "operationId": "getCoflBazaarHistoryRange",
+        "summary": "Get Bazaar history for a date range",
+        "description": "Returns aggregated Bazaar history between two ISO 8601 timestamps. Keep the requested range at 31 days or less.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel Bazaar item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "description": "Range start as an ISO 8601 timestamp.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "description": "Range end as an ISO 8601 timestamp, no more than 31 days after start.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Custom-range Bazaar history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BazaarHistory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/item/price/{itemTag}/current": {
+      "get": {
+        "operationId": "getCoflCurrentItemPrice",
+        "summary": "Get the current SkyCofl item price",
+        "description": "Returns SkyCofl's current price and availability for an exact AH or Bazaar item ID.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "required": false,
+            "description": "Quantity to price together.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current item price",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentPrice"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/item/price/{itemTag}/history/day": {
+      "get": {
+        "operationId": "getCoflAuctionPriceHistoryDay",
+        "summary": "Get one day of item price history",
+        "description": "Returns one day of aggregated price history for an exact item ID. Use mainly for Auction House items.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One-day item price history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuctionPriceHistory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/item/price/{itemTag}/history/week": {
+      "get": {
+        "operationId": "getCoflAuctionPriceHistoryWeek",
+        "summary": "Get one week of item price history",
+        "description": "Returns seven days of aggregated price history for an exact item ID. Use mainly for Auction House items.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seven-day item price history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuctionPriceHistory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/item/price/{itemTag}/history/month": {
+      "get": {
+        "operationId": "getCoflAuctionPriceHistoryMonth",
+        "summary": "Get one month of item price history",
+        "description": "Returns one month of aggregated price history for an exact item ID. Use mainly for Auction House items.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One-month item price history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuctionPriceHistory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/item/price/{itemTag}/analysis": {
+      "get": {
+        "operationId": "getCoflItemPriceAnalysis",
+        "summary": "Analyze an item's sales and volatility",
+        "description": "Returns sales volume, typical prices, sell time, volatility, and related analysis for an exact item ID.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Analysis period. Longer periods may require a paid SkyCofl tier.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Item price analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceAnalysis"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/auctions/tag/{itemTag}/active/bin": {
+      "get": {
+        "operationId": "getCoflLowestBinAuctions",
+        "summary": "Get the ten lowest active BIN auctions",
+        "description": "Returns up to ten lowest active BIN listings for an exact Auction House item ID, ordered cheapest first by SkyCofl.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel Auction House item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lowest active BIN listings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Auction"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/auctions/tag/{itemTag}/sold": {
+      "get": {
+        "operationId": "getCoflSoldAuctions",
+        "summary": "Get recent sold auctions",
+        "description": "Returns a small page of recently sold auctions for an exact item ID. Keep pageSize low to avoid oversized Action responses.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "itemTag",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel Auction House item ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_:-]{1,80}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Zero-based result page.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "description": "Number of sold auctions. Prefer 20 and never exceed 50 in this Action.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent sold auctions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Auction"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/auction/{auctionUuid}": {
+      "get": {
+        "operationId": "getCoflAuctionDetails",
+        "summary": "Get details for one auction",
+        "description": "Returns detailed data for one exact auction UUID, including item identity, price, timing, and available NBT fields.",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "auctionUuid",
+            "in": "path",
+            "required": true,
+            "description": "Exact Hypixel auction UUID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F-]{32,36}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Auction details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Auction"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "SkyCoflBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "SkyCofl website Account token supplied through the GPT Action authentication settings."
+      }
+    },
+    "responses": {
+      "ErrorResponse": {
+        "description": "SkyCofl error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          },
+          "text/plain": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "integer"
+          },
+          "pricePerUnit": {
+            "type": "number"
+          },
+          "orders": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "BazaarSnapshot": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "buyPrice": {
+            "type": "number"
+          },
+          "buyVolume": {
+            "type": "integer"
+          },
+          "buyMovingWeek": {
+            "type": "integer"
+          },
+          "buyOrdersCount": {
+            "type": "integer"
+          },
+          "sellPrice": {
+            "type": "number"
+          },
+          "sellVolume": {
+            "type": "integer"
+          },
+          "sellMovingWeek": {
+            "type": "integer"
+          },
+          "sellOrdersCount": {
+            "type": "integer"
+          },
+          "timeStamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "buyOrders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          },
+          "sellOrders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "BazaarHistory": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/BazaarHistoryPoint"
+        }
+      },
+      "BazaarHistoryPoint": {
+        "type": "object",
+        "properties": {
+          "minBuy": {
+            "type": "number"
+          },
+          "maxBuy": {
+            "type": "number"
+          },
+          "buy": {
+            "type": "number"
+          },
+          "minSell": {
+            "type": "number"
+          },
+          "maxSell": {
+            "type": "number"
+          },
+          "sell": {
+            "type": "number"
+          },
+          "buyVolume": {
+            "type": "integer"
+          },
+          "sellVolume": {
+            "type": "integer"
+          },
+          "buyMovingWeek": {
+            "type": "integer"
+          },
+          "sellMovingWeek": {
+            "type": "integer"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "CurrentPrice": {
+        "type": "object",
+        "properties": {
+          "sell": {
+            "type": "number"
+          },
+          "buy": {
+            "type": "number"
+          },
+          "available": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isAh": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "AuctionPriceHistory": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/AuctionPricePoint"
+        }
+      },
+      "AuctionPricePoint": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "avg": {
+            "type": "number"
+          },
+          "volume": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "PriceAnalysis": {
+        "type": "object",
+        "properties": {
+          "totalSales": {
+            "type": "integer"
+          },
+          "salesPerDay": {
+            "type": "number"
+          },
+          "avgPrice": {
+            "type": "number"
+          },
+          "medianPrice": {
+            "type": "number"
+          },
+          "minPrice": {
+            "type": "integer"
+          },
+          "maxPrice": {
+            "type": "integer"
+          },
+          "avgSellTimeSeconds": {
+            "type": "number"
+          },
+          "medianSellTimeSeconds": {
+            "type": "number"
+          },
+          "binPercentage": {
+            "type": "number"
+          },
+          "priceStdDev": {
+            "type": "number"
+          },
+          "priceCoeffVariation": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Auction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "uuid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "count": {
+            "type": "integer"
+          },
+          "startingBid": {
+            "type": "integer"
+          },
+          "highestBidAmount": {
+            "type": "integer"
+          },
+          "bin": {
+            "type": "boolean"
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "auctioneerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tier": {
+            "type": [
+              "string",
+              "integer",
+              "null"
+            ]
+          },
+          "reforge": {
+            "type": [
+              "string",
+              "integer",
+              "null"
+            ]
+          },
+          "flatNbt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "flattenedNbt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}
