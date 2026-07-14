@@ -1,6 +1,6 @@
 import { UpstreamError } from "./http.js";
 
-const UPSTREAM_USER_AGENT = "SkyblockGPT/2.5.0 (contact: Discord gs._)";
+const UPSTREAM_USER_AGENT = "SkyblockGPT/2.5.1 (contact: Discord gs._)";
 const memoryCache = new Map();
 
 export async function fetchProfiles(uuid, env) {

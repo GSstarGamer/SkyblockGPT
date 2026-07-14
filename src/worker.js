@@ -67,7 +67,7 @@ export default {
       return json({
         success: true,
         service: "skyblock-gpt-unified-gateway",
-        version: "2.5.0",
+        version: "2.5.1",
         providers: ["Hypixel"],
       });
     }

@@ -140,7 +140,7 @@ const call = async (path, authenticated = true) => worker.fetch(new Request(`htt
 
 const health = await (await call("/health", false)).json();
 assert.equal(health.success, true);
-assert.equal(health.version, "2.5.0");
+assert.equal(health.version, "2.5.1");
 
 const unauthorized = await call(`/v1/player/profiles?uuid=${playerUuid}`, false);
 assert.equal(unauthorized.status, 401);
