@@ -45,7 +45,7 @@ src/
 - `items.js` → `nbt.js`, `util.js`.
 - `sections.js` → `items.js`, `params.js`, `util.js` (`compactMuseum`/`compactPlayerCollections` use `normalizeUuid`).
 - `market.js` → `items.js`, `util.js` (`compactAuction` decodes `item_bytes` via `decodeInventoryBlob` from `items.js`).
-- `profiles.js` → `hypixel.js`, `params.js`, `util.js`.
+- `profiles.js` → `hypixel.js`, `http.js`, `params.js`, `util.js` (`loadSelectedMember`/`selectProfile` throw `ClientError`).
 - `routes/*.js` → any of the above.
 - `worker.js` → `routes/*.js`, `http.js`.
 
