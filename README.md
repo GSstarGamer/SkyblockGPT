@@ -20,7 +20,8 @@ AGENTS.md                             Codex and repository-wide agent rules
 CLAUDE.md                             Claude Code entry point
 docs/PROJECT_CONTEXT.md               Product, architecture, API, and invariants
 docs/CHANGE_PLAYBOOK.md               Per-change implementation/sync checklist
-src/worker.js                         Cloudflare Worker
+src/worker.js                         Cloudflare Worker entry (auth, route table)
+src/*.js, src/routes/*.js             Worker domain and route modules
 actions/hypixel-worker.openapi.json  Hypixel/Worker Custom GPT Action
 actions/minecraft-username.openapi.json
 actions/skycofl.openapi.json

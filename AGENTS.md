@@ -10,7 +10,7 @@ The project is public and globally used. Never hard-code a player identity, prof
 
 ## Source-of-truth map
 
-- `src/worker.js`: deployed Cloudflare Worker and all compact Hypixel behavior.
+- `src/worker.js`: deployed Cloudflare Worker entry point (auth, CORS, route table); domain and route modules live in `src/*.js` and `src/routes/*.js`.
 - `actions/hypixel-worker.openapi.json`: ChatGPT contract for the Worker.
 - `actions/minecraft-username.openapi.json`: direct username-to-UUID Action.
 - `actions/skycofl.openapi.json`: direct SkyCofl history/AH Action.
@@ -51,7 +51,7 @@ If a credential appears in user-provided material, do not copy it into a command
 ## Implementation constraints
 
 - Runtime: Cloudflare Workers, JavaScript ES modules, Node.js 20+ for local tooling.
-- Keep `src/worker.js` dependency-free unless there is a strong reason to change the deployment model.
+- Keep everything under `src/` dependency-free (local ES modules only) unless there is a strong reason to change the deployment model.
 - Only `GET` and `OPTIONS` are currently supported.
 - Validate and normalize all UUIDs, item tags, enums, booleans, pagination, and text lengths at the Worker boundary.
 - Upstream requests need a timeout and normalized JSON errors. Respect `429`; do not implement retry storms.

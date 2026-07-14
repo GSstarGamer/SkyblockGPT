@@ -17,7 +17,7 @@ Use this file after reading `AGENTS.md` and `docs/PROJECT_CONTEXT.md`.
 ## Worker bug fix without an API change
 
 1. Reproduce with a focused mocked case in `scripts/test-worker.mjs`.
-2. Fix `src/worker.js` while keeping route, parameter, operation ID, and response shape compatible.
+2. Fix the relevant module under `src/` while keeping route, parameter, operation ID, and response shape compatible.
 3. Run `npm test` and `npm run deploy:dry`.
 4. Merge to `main`; the Worker deploy workflow runs automatically.
 5. Verify `/health` and the narrow route. No GPT Builder update should be necessary.
@@ -27,7 +27,7 @@ Prefer this path. Stable contracts are what make routine updates automatable.
 ## Add or change a Worker endpoint
 
 1. Design a compact/filterable response. Do not expose a raw full Hypixel payload.
-2. Add or update the route/handler in `src/worker.js`.
+2. Add or update the handler in the matching `src/routes/*.js` file and register the path in the `ROUTES` map in `src/worker.js`.
 3. Update `actions/hypixel-worker.openapi.json` in the same change.
 4. Keep the operation ID stable for modifications; use a descriptive unique ID for a new operation.
 5. Add mocked success, validation, auth, empty/missing-data, pagination, and relevant upstream-error assertions.
@@ -47,8 +47,8 @@ Do not create another Action set for the same Worker domain.
 
 ## Add a new profile section
 
-1. Add the section name to `PROFILE_SECTIONS`.
-2. Implement its compact builder under `buildSection`.
+1. Add the section name to `PROFILE_SECTIONS` in `src/sections.js`.
+2. Implement its compact builder under `buildSection` in `src/sections.js`.
 3. Decide and document availability semantics; never substitute zero for missing data.
 4. Update the `section` parameter enum and response schema in the Worker OpenAPI document.
 5. Add representative API-enabled, missing, and partial fixtures to the Worker test.
