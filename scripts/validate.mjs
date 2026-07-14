@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -64,10 +64,24 @@ if (instructions.length > 8_000) {
   errors.push(`gpt/instructions.md: ${instructions.length} characters exceeds 8000`);
 }
 
-try {
-  execFileSync(process.execPath, ["--check", resolve(root, "src/worker.js")], { stdio: "pipe" });
-} catch (error) {
-  errors.push(`src/worker.js: JavaScript syntax check failed\n${error.stderr?.toString() || error.message}`);
+const workerSources = [];
+const collectWorkerSources = (directory) => {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const full = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      collectWorkerSources(full);
+    } else if (entry.name.endsWith(".js")) {
+      workerSources.push(full);
+    }
+  }
+};
+collectWorkerSources(resolve(root, "src"));
+for (const file of workerSources) {
+  try {
+    execFileSync(process.execPath, ["--check", file], { stdio: "pipe" });
+  } catch (error) {
+    errors.push(`${file}: JavaScript syntax check failed\n${error.stderr?.toString() || error.message}`);
+  }
 }
 
 if (errors.length) {

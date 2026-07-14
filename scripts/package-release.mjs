@@ -13,7 +13,7 @@ rmSync(dist, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 
 const files = [
-  ["src/worker.js", "cloudflare-worker.js"],
+  ["src", "cloudflare-worker"],
   ["actions/hypixel-worker.openapi.json", "skyblock-gpt-unified-action.json"],
   ["actions/minecraft-username.openapi.json", "minecraft-username-action.json"],
   ["actions/skycofl.openapi.json", "skycofl-direct-action.json"],
@@ -23,7 +23,7 @@ const files = [
 ];
 
 for (const [source, destination] of files) {
-  cpSync(resolve(root, source), resolve(stage, destination));
+  cpSync(resolve(root, source), resolve(stage, destination), { recursive: true });
 }
 
 try {
