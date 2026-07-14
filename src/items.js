@@ -95,7 +95,7 @@ export function findSacksCounts(member) {
   return null;
 }
 
-export function isNbtBlob(value) {
+function isNbtBlob(value) {
   if (!value || typeof value !== "object" || typeof value.data !== "string") return false;
   const data = value.data.replace(/\s+/g, "");
   if (data.length < 8) return false;
@@ -112,7 +112,7 @@ export function containerMetadata(container) {
   };
 }
 
-export function inventoryContainerKind(path) {
+function inventoryContainerKind(path) {
   const value = path.toLowerCase();
   if (/talisman|accessor/.test(value)) return "accessory_bag";
   if (/inv_armor|\.armor/.test(value)) return "armor";
@@ -131,7 +131,7 @@ export function inventoryContainerKind(path) {
   return "other";
 }
 
-export function inventoryContainerLabel(path) {
+function inventoryContainerLabel(path) {
   const kind = inventoryContainerKind(path);
   const labels = {
     accessory_bag: "Accessory Bag",
@@ -226,7 +226,7 @@ export async function decodeInventoryBlob(blob) {
   }
 }
 
-export function compactNbtItem(item, fallbackSlot) {
+function compactNbtItem(item, fallbackSlot) {
   if (!item || typeof item !== "object" || !Object.keys(item).length) return null;
 
   const tag = item.tag && typeof item.tag === "object" ? item.tag : {};

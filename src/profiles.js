@@ -67,6 +67,6 @@ export function getMember(profile, uuid) {
   return null;
 }
 
-export function isDeleted(member) {
+function isDeleted(member) {
   return Boolean(member?.profile?.deletion_notice || member?.deletion_notice);
 }

@@ -1,4 +1,4 @@
-export async function mapInBatches(values, batchSize, mapper) {
+async function mapInBatches(values, batchSize, mapper) {
   const results = [];
   for (let index = 0; index < values.length; index += batchSize) {
     results.push(...await Promise.all(values.slice(index, index + batchSize).map(mapper)));
