@@ -325,7 +325,7 @@ export async function handlePlayerExtra(url, env) {
   const query = readTextParameter(url, "query", 100, "").toLowerCase();
   const page = readIntegerParameter(url, "page", 0, 0, 10_000);
   const limit = readIntegerParameter(url, "limit", 20, 1, 40);
-  const museum = compactMuseum(payload.profile || {}, query, page, limit);
+  const museum = await compactMuseum(payload.profile || {}, query, page, limit);
 
   return json({
     success: true,

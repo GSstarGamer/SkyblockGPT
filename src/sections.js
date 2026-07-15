@@ -15,6 +15,7 @@ import {
   cleanItemName,
   compactAccessories,
   compactGear,
+  decodeInventoryBlob,
   formatItemId,
 } from "./items.js";
 
@@ -55,7 +56,7 @@ export function compactGarden(garden) {
   }, 10, 2_000);
 }
 
-export function compactMuseum(profileData, query, page, limit) {
+export async function compactMuseum(profileData, query, page, limit) {
   const members = [];
   const entries = [];
   for (const [memberUuid, rawMuseum] of Object.entries(objectOrEmpty(profileData))) {
@@ -66,30 +67,19 @@ export function compactMuseum(profileData, query, page, limit) {
         member_uuid: normalizeUuid(memberUuid),
         source: "items",
         item_id: itemId,
-        data: sanitize(itemData, 7, 400),
+        donated_time: optionalNumber(itemData?.donated_time),
+        blob: itemData?.items ?? null,
       });
     }
     for (const [index, special] of (Array.isArray(museum.special) ? museum.special : []).entries()) {
-      const specialItems = objectOrEmpty(special?.items);
-      if (Object.keys(specialItems).length) {
-        for (const [itemId, itemData] of Object.entries(specialItems)) {
-          memberEntries.push({
-            member_uuid: normalizeUuid(memberUuid),
-            source: "special",
-            special_index: index,
-            donated_time: optionalNumber(special?.donated_time),
-            item_id: itemId,
-            data: sanitize(itemData, 7, 400),
-          });
-        }
-      } else {
-        memberEntries.push({
-          member_uuid: normalizeUuid(memberUuid),
-          source: "special",
-          special_index: index,
-          data: sanitize(special, 7, 400),
-        });
-      }
+      memberEntries.push({
+        member_uuid: normalizeUuid(memberUuid),
+        source: "special",
+        special_index: index,
+        item_id: null,
+        donated_time: optionalNumber(special?.donated_time),
+        blob: special?.items ?? null,
+      });
     }
     members.push({
       member_uuid: normalizeUuid(memberUuid),
@@ -100,11 +90,29 @@ export function compactMuseum(profileData, query, page, limit) {
     entries.push(...memberEntries);
   }
 
-  const filtered = entries.filter((entry) => !query || JSON.stringify(entry).toLowerCase().includes(query));
+  // Query matches identifiers only. It previously ran over JSON.stringify of the
+  // entry, which meant it searched truncated base64 — never a useful match.
+  const filtered = entries.filter((entry) => !query ||
+    `${entry.item_id || ""} ${entry.source} ${entry.member_uuid}`.toLowerCase().includes(query));
+  const pagination = paginateRecords(filtered, page, limit);
+
+  // Decode only this page. Museums hold hundreds of items; decoding all of them
+  // would be base64 + gzip + a full NBT walk each.
+  const items = await Promise.all(pagination.items.map(async ({ blob, ...entry }) => {
+    if (!blob) return { ...entry, item: null, decode_error: null };
+    const decoded = await decodeInventoryBlob(blob);
+    return {
+      ...entry,
+      item: decoded.records[0]?.summary || null,
+      decode_error: decoded.error,
+    };
+  }));
+
   return {
     members,
     query: query || null,
-    ...paginateRecords(filtered, page, limit),
+    ...pagination,
+    items,
   };
 }
 
@@ -821,12 +829,19 @@ function compactStats(member, skillResource = null) {
 
 function filterNumericStats(stats, pattern, limit = 160) {
   const result = {};
-  for (const [key, value] of Object.entries(stats)) {
-    if (!pattern.test(key)) continue;
-    if (!["number", "boolean", "string"].includes(typeof value)) continue;
-    result[key] = value;
-    if (Object.keys(result).length >= limit) break;
-  }
+  const walk = (value, prefix, depth) => {
+    if (depth > 4) return;
+    for (const [key, item] of Object.entries(value)) {
+      if (Object.keys(result).length >= limit) return;
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        walk(item, path, depth + 1);
+      } else if (["number", "boolean", "string"].includes(typeof item) && pattern.test(path)) {
+        result[path] = item;
+      }
+    }
+  };
+  walk(objectOrEmpty(stats), "", 0);
   return result;
 }
 
