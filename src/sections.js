@@ -56,6 +56,8 @@ export function compactGarden(garden) {
   }, 10, 2_000);
 }
 
+const MUSEUM_ITEMS_PER_ENTRY = 8;
+
 export async function compactMuseum(profileData, query, page, limit) {
   const members = [];
   const entries = [];
@@ -99,16 +101,20 @@ export async function compactMuseum(profileData, query, page, limit) {
   // Decode only this page. Museums hold hundreds of items; decoding all of them
   // would be base64 + gzip + a full NBT walk each. A single entry can hold more
   // than one item — a donated armor set carries every piece in one blob — so
-  // report the whole list rather than just the first.
+  // report the whole list rather than just the first. Cap and flag per entry,
+  // mirroring compactNbtItem's attributes/enchantments caps in items.js, so a
+  // uniform page of multi-piece sets can't push a response over the size cap.
   const items = await Promise.all(pagination.items.map(async ({ blob, ...entry }) => {
     if (!blob) {
-      return { ...entry, blob_present: false, decoded_items: [], decode_error: null };
+      return { ...entry, blob_present: false, decoded_items: [], decoded_items_truncated: false, decode_error: null };
     }
     const decoded = await decodeInventoryBlob(blob);
+    const summaries = decoded.records.map((record) => record.summary);
     return {
       ...entry,
       blob_present: decoded.present,
-      decoded_items: decoded.records.map((record) => record.summary),
+      decoded_items: summaries.slice(0, MUSEUM_ITEMS_PER_ENTRY),
+      decoded_items_truncated: summaries.length > MUSEUM_ITEMS_PER_ENTRY,
       decode_error: decoded.error,
     };
   }));

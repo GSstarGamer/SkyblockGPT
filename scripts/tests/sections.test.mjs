@@ -56,6 +56,7 @@ export async function run() {
   assert.equal(entry.decoded_items[0].name, "Azure Bluet");
   assert.equal(entry.blob_present, true, "a decodable blob must report presence");
   assert.equal(entry.decode_error, null);
+  assert.equal(entry.decoded_items_truncated, false, "a single-item blob must not be flagged as truncated");
   assert.equal(entry.item, undefined, "the old singular item field must be gone");
   assert.equal(entry.data, undefined, "raw blob must not ship");
   assert.equal(entry.blob, undefined, "internal blob ref must not ship");
