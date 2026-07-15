@@ -39,7 +39,7 @@ export async function handleBazaarProducts(url, env) {
   ]), "product_id");
   const order = requireEnumParameter(url, "order", new Set(["asc", "desc"]), "asc");
   const [payload, itemNames] = await Promise.all([
-    fetchHypixelJson("/v2/skyblock/bazaar", env, {}, { authenticated: false, cacheSeconds: 15 }),
+    fetchHypixelJson("/v2/skyblock/bazaar", env, {}, { authenticated: false }),
     fetchSkyBlockItemNameMap(env),
   ]);
 
@@ -71,7 +71,7 @@ export async function handleBazaarProducts(url, env) {
 export async function handleBazaarProduct(url, env) {
   const requestedProduct = requireItemTag(url, "product");
   const [payload, itemNames] = await Promise.all([
-    fetchHypixelJson("/v2/skyblock/bazaar", env, {}, { authenticated: false, cacheSeconds: 15 }),
+    fetchHypixelJson("/v2/skyblock/bazaar", env, {}, { authenticated: false }),
     fetchSkyBlockItemNameMap(env),
   ]);
   const entries = Object.entries(objectOrEmpty(payload.products));
@@ -124,7 +124,6 @@ export async function handleAuctionPage(url, env) {
   );
   const payload = await fetchHypixelJson("/v2/skyblock/auctions", env, { page: upstreamPage }, {
     authenticated: false,
-    cacheSeconds: 0,
   });
 
   let records = (Array.isArray(payload.auctions) ? payload.auctions : []).filter((auction) => {
@@ -187,7 +186,6 @@ export async function handleLowestBin(url, env) {
     fetchSkyBlockItemNameMap(env),
     fetchHypixelJson("/v2/skyblock/auctions", env, { page: startPage }, {
       authenticated: false,
-      cacheSeconds: 0,
     }),
   ]);
   const target = resolveSkyBlockItem(itemNames, requestedItem);
@@ -233,7 +231,6 @@ export async function handleLowestBin(url, env) {
     const payloadBatch = await Promise.all(pageBatch.map((page) =>
       fetchHypixelJson("/v2/skyblock/auctions", env, { page }, {
         authenticated: false,
-        cacheSeconds: 0,
       })
     ));
     for (const payload of payloadBatch) collectCandidates(payload);
@@ -333,7 +330,6 @@ export async function handleAuctionLookup(url, env) {
   const limit = requestedDetail === "full" ? Math.min(requestedLimit, 5) : requestedLimit;
   const payload = await fetchHypixelJson("/v2/skyblock/auction", env, { [lookupType]: normalizeUuid(lookupValue) }, {
     authenticated: true,
-    cacheSeconds: 20,
   });
   const records = Array.isArray(payload.auctions) ? payload.auctions : [];
   const pagination = paginateRecords(records, page, limit);
@@ -359,7 +355,6 @@ export async function handleEndedAuctions(url, env) {
   const limit = detail === "full" ? Math.min(requestedLimit, 5) : requestedLimit;
   const payload = await fetchHypixelJson("/v2/skyblock/auctions_ended", env, {}, {
     authenticated: false,
-    cacheSeconds: 20,
   });
   const records = (Array.isArray(payload.auctions) ? payload.auctions : [])
     .filter((auction) => !query || `${auction.auction_id || ""} ${auction.seller || ""}`.toLowerCase().includes(query));

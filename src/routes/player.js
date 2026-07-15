@@ -286,7 +286,6 @@ export async function handlePlayerExtra(url, env) {
   if (kind === "bingo") {
     const payload = await fetchHypixelJson("/v2/skyblock/bingo", env, { uuid }, {
       authenticated: true,
-      cacheSeconds: 60,
     });
     return json({
       success: true,
@@ -310,7 +309,6 @@ export async function handlePlayerExtra(url, env) {
   if (kind === "garden") {
     const payload = await fetchHypixelJson("/v2/skyblock/garden", env, { profile: profileId }, {
       authenticated: true,
-      cacheSeconds: 60,
     });
     return json({
       success: true,
@@ -323,7 +321,6 @@ export async function handlePlayerExtra(url, env) {
 
   const payload = await fetchHypixelJson("/v2/skyblock/museum", env, { profile: profileId }, {
     authenticated: true,
-    cacheSeconds: 60,
   });
   const query = readTextParameter(url, "query", 100, "").toLowerCase();
   const page = readIntegerParameter(url, "page", 0, 0, 10_000);
