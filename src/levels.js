@@ -237,7 +237,7 @@ export const GOLDEN_DRAGON_LADDER = (() => {
   return cumulativeFrom([...legendarySteps, ...beyond]);
 })();
 
-function unavailable(experience, tableVersion) {
+function unavailable(experience, tableVersion, authority, sourceUrl) {
   return {
     available: false,
     experience: experience ?? null,
@@ -249,6 +249,8 @@ function unavailable(experience, tableVersion) {
     progress_to_next_level: null,
     level_source: "static_table",
     table_version: tableVersion,
+    source_authority: authority,
+    source_url: sourceUrl,
     verify_on_wiki: true,
   };
 }
@@ -258,13 +260,19 @@ function unavailable(experience, tableVersion) {
  *
  * @param {number|null} experience Total accumulated XP, or null when the API did not expose it.
  * @param {number[]} ladder Cumulative XP required to reach level 1, 2, 3, ...
- * @param {{ maxLevel?: number, tableVersion: string }} options
+ * @param {{ maxLevel?: number, tableVersion: string, authority?: string, sourceUrl?: string|null }} options
+ *   `authority` distinguishes which wiki a ladder came from (see LADDER_AUTHORITY
+ *   above); it defaults to LADDER_AUTHORITY_WIKI and must be passed explicitly by
+ *   callers using a ladder recorded there as LADDER_AUTHORITY_CORROBORATED, e.g.
+ *   DUNGEON_CLASS_LADDER. It is never inferred from the ladder's contents.
  */
 export function levelFromLadder(experience, ladder, options) {
   const tableVersion = options?.tableVersion || "unknown";
+  const authority = options?.authority ?? LADDER_AUTHORITY_WIKI;
+  const sourceUrl = options?.sourceUrl ?? null;
   const xp = optionalNumber(experience);
   if (xp === null || !Array.isArray(ladder) || !ladder.length) {
-    return unavailable(xp, tableVersion);
+    return unavailable(xp, tableVersion, authority, sourceUrl);
   }
 
   const maxLevel = optionalNumber(options?.maxLevel) ?? ladder.length;
@@ -304,6 +312,8 @@ export function levelFromLadder(experience, ladder, options) {
     progress_to_next_level: atMax ? 1 : round(progress, 6),
     level_source: "static_table",
     table_version: tableVersion,
+    source_authority: authority,
+    source_url: sourceUrl,
     verify_on_wiki: true,
   };
 }

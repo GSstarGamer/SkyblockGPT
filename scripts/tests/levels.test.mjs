@@ -5,6 +5,9 @@ import {
   CATACOMBS_LADDER,
   DUNGEON_CLASS_LADDER,
   GOLDEN_DRAGON_LADDER,
+  LADDER_AUTHORITY,
+  LADDER_AUTHORITY_CORROBORATED,
+  LADDER_AUTHORITY_WIKI,
   PET_LADDERS,
   SLAYER_LADDERS,
   TABLE_VERSION,
@@ -49,11 +52,39 @@ export async function run() {
   assert.equal(max.table_version, "test-1");
   assert.equal(max.verify_on_wiki, true);
 
+  // Authority and source URL default when options omit them: wiki-sourced,
+  // no specific page cited.
+  assert.equal(max.source_authority, LADDER_AUTHORITY_WIKI, "authority defaults to wiki");
+  assert.equal(max.source_url, null, "source_url defaults to null");
+
+  // A caller can declare a different authority and cite a source page.
+  const corroborated = levelFromLadder(400, ladder, {
+    maxLevel: 3,
+    tableVersion: "test-1",
+    authority: LADDER_AUTHORITY_CORROBORATED,
+    sourceUrl: "https://example.test/source",
+  });
+  assert.equal(corroborated.source_authority, LADDER_AUTHORITY_CORROBORATED);
+  assert.equal(corroborated.source_url, "https://example.test/source");
+
   // Missing XP is unavailable, never zero (AGENTS.md rule 5).
   const missing = levelFromLadder(null, ladder, options);
   assert.equal(missing.level, null);
   assert.equal(missing.experience, null);
   assert.equal(missing.available, false);
+
+  // Unavailable results must not silently drop provenance either.
+  assert.equal(missing.source_authority, LADDER_AUTHORITY_WIKI, "unavailable defaults to wiki authority");
+  assert.equal(missing.source_url, null, "unavailable defaults to null source_url");
+
+  const missingCorroborated = levelFromLadder(null, ladder, {
+    ...options,
+    authority: LADDER_AUTHORITY_CORROBORATED,
+    sourceUrl: "https://example.test/source",
+  });
+  assert.equal(missingCorroborated.available, false);
+  assert.equal(missingCorroborated.source_authority, LADDER_AUTHORITY_CORROBORATED);
+  assert.equal(missingCorroborated.source_url, "https://example.test/source");
 
   // An empty ladder cannot derive anything and must say so.
   const empty = levelFromLadder(500, [], options);
@@ -248,5 +279,26 @@ export async function run() {
     levels.LADDER_AUTHORITY.dungeon_class,
     levels.LADDER_AUTHORITY_WIKI,
     "class ladder must not claim wiki authority",
+  );
+
+  // A consumer wiring DUNGEON_CLASS_LADDER must pass its recorded authority, and
+  // the result must actually carry it -- not silently fall back to the wiki
+  // default. This is the assertion that would have caught the original bug: if
+  // the authority option is ever dropped from levelFromLadder, this fails while
+  // the LADDER_AUTHORITY map assertions above keep passing.
+  const classResult = levelFromLadder(400, DUNGEON_CLASS_LADDER, {
+    maxLevel: 50,
+    tableVersion: TABLE_VERSION,
+    authority: LADDER_AUTHORITY["dungeon_class"],
+  });
+  assert.equal(
+    classResult.source_authority,
+    "corroborated_secondary",
+    "class ladder result must report corroborated_secondary authority",
+  );
+  assert.notEqual(
+    classResult.source_authority,
+    LADDER_AUTHORITY_WIKI,
+    "class ladder result must not claim wiki authority",
   );
 }
