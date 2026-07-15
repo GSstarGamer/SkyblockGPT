@@ -1857,12 +1857,66 @@ After deployment, check `/health` and one narrow authenticated route without exp
 
 ## Follow-up: Phase 2 (separate plan)
 
-Not in this plan. Needs its own, written after Phase 1 merges:
+Not in this plan. Needs its own, written after this branch merges.
 
-- Wire `levels.js` into slayers, dungeons, pets
+This section is the durable record. The SDD progress ledger under `.superpowers/sdd/` is gitignored scratch — it does not survive a fresh clone or `git clean -fdx`. Anything that must not be lost lives here, in git.
+
+### Blocking prerequisite — do this before wiring `levels.js` into any response
+
+`src/levels.js` is the only module in the Worker that reports numbers no API provides. Its ladders come from two different sources and `LADDER_AUTHORITY` records which is which:
+
+- `slayer`, `catacombs`, `pets`, `golden_dragon` → `"wiki"`, from `hypixelskyblock.minecraft.wiki`, the wiki `AGENTS.md` rule 4 pins.
+- `dungeon_class` → `"corroborated_secondary"`, from `wiki.hypixel.net/Classes` (revision 2024-11-11). **The pinned wiki publishes no class ladder at all.** It was accepted only because that same secondary source also publishes a Catacombs table matching our independently-verified `CATACOMBS_LADDER` on all 50 values.
+
+`levelFromLadder` reports `source_authority: null` when a caller does not declare one — undeclared provenance reads unknown, never authoritative. **Consumers must pass authority.** Use `LADDER_SOURCES`, which pairs every ladder with its authority, source URL, and cap so they cannot be mismatched:
+
+```js
+const source = LADDER_SOURCES.dungeon_class;
+levelFromLadder(xp, source.ladder, { ...source, tableVersion: TABLE_VERSION });
+```
+
+A response that derives a class level must not present it as pinned-wiki-sourced. Surface `source_authority` so the GPT can qualify the claim.
+
+Two data caveats that ride along:
+
+- **Class ladder staleness is one-directional.** Its source is frozen at Nov 2024. The `deepEqual` tripwire in `levels.test.mjs` catches Catacombs-side drift, but nothing re-verifies the class table against a live class source, because none exists. An in-game class-only change would fire no assertion. Inherent to the data, not a defect.
+- **`level_with_progress` rounding.** `round(99 + 0.99999947, 4)` yields `100`, so a Golden Dragon can report level 100 — a level the wiki says cannot exist. Generic to any ladder within ~0.005% of a threshold.
+
+### Spec finding #6 is only half-closed
+
+`sanitize`'s truncation collector is wired into `compactStats` (`lifetime_counters_truncated`) and `compactGarden` (`garden_truncated`) — both sibling fields, so additive. These remain silent, because flagging them needs a breaking shape change:
+
+- `buildSection` `case "bestiary"` → `sanitize(member.bestiary, 5, 700)` returns the sanitized object as the entire section payload; there is no sibling to attach a flag to.
+- `buildSection` `case "rift"` → `sanitize(member.rift, 6, 500)`, same problem.
+- `compactPets` → returns a bare array, capped at 250 with no total.
+
+All three need the payload wrapped, which is why they wait for the phase that owns the OpenAPI and GPT instructions. `AGENTS.md` requires explicit completeness indicators; until these are wrapped, the rule is not fully honored.
+
+### Contract deltas this branch shipped ahead of the OpenAPI
+
+Deliberate and human-approved: additive response fields do not break a Custom GPT, and it kept `actions/` under Phase 2's sole ownership. Phase 2 must document them.
+
+- **`match_count_in_segment` now saturates at `limit`** — a value-semantics change to an existing field. Lazy decoding stops early, so the true count is never learned. The additive `match_count_is_lower_bound: true` flags it. Any GPT instruction reading it as exact is stale.
+- **`authoritative_lowest_bin` stays null in production** until the GPT merges segments via `segments_required` / `segment_index`. The payoff is unrealized until then.
+- **The lowest-BIN merge loop has an aligned-tiling precondition.** `segments_required` / `segment_index` are only coherent when the client walks `next_start_page` and holds `max_pages` constant. `start_page` (0-10000) and `max_pages` (1-4) are both client-controlled: `start_page=5, max_pages=4` yields `segment_index=1`, colliding with the canonical 4-7 segment while covering 5-8, and page 4 is never scanned. Metadata-only — `covers_all_pages` is computed independently, so `authoritative_lowest_bin` cannot be wrongly set — but `market-playbook.md` must state the precondition as a correctness requirement of the loop, not a suggestion.
+- **Museum entries changed shape**: `item` (singular) → `decoded_items` (array), plus `blob_present` and `decoded_items_truncated`. No OpenAPI update was needed — `/v1/player/extra` is typed as the generic `GenericDataResponse` with no per-field museum shape, verified by two reviewers. Revisit if Phase 2 exposes museum fields to the GPT.
+- **`decode_budget_exhausted` and `decodes_performed`** are new on lowest-BIN. `gpt/knowledge/market-playbook.md` should teach that a 5xx from that route means reduce `max_pages` and resume from the last `next_start_page` — Cloudflare CPU exhaustion (error 1102) is uncatchable, so the Worker cannot return a graceful body if it ever hits the platform limit despite the decode budget.
+
+### Test coverage gaps worth closing
+
+- **The museum fixture decodes to exactly one item.** So a regression to `decoded_items: [decoded.records[0]?.summary]` — the exact bug a review caught during this branch — would still pass. "Every record" is verified by reading the code, not by a test. Add a multi-item blob fixture.
+- **Slayer and catacombs tables are anchored only at level-1, one mid value, and max.** Roughly 33 of 50 slayer and 46 of 50 catacombs values are unpinned against a future careless edit. The pet ladders are derived, so their end-anchors transitively cover all 119 curve values. Cheap hardening: `deepEqual` the full sourced arrays.
+
+### The original Phase 2 scope
+
+- Wire `levels.js` into slayers, dungeons, pets (see the blocking prerequisite above first)
 - `compactPets` totals and truncation (breaking array-to-object shape change)
-- New sections: `crimson`, `jacobs`, `trophy_fish`, `progression`
-- OpenAPI: section enum, response schemas, Lane B's field delta
-- `gpt/instructions.md`, `gpt/knowledge/market-playbook.md` (lowest-BIN merge loop, 5xx back-off), `docs/PROJECT_CONTEXT.md`
+- New sections: `crimson`, `jacobs`, `trophy_fish`, `progression` (minions, perks, active effects, deaths)
+- OpenAPI: section enum, response schemas, this branch's field deltas
+- `gpt/instructions.md`, `gpt/knowledge/market-playbook.md`, `docs/PROJECT_CONTEXT.md` — the last gains a trust-boundary entry for the Worker holding non-API level tables, which only becomes true once `levels.js` has a consumer
 - Both Worker version strings
 - Manual GPT Builder sync
+
+### Cosmetic, not worth its own commit
+
+`/privacy` in `src/http.js` still says market responses "may be cached briefly". They are now TTL 0. Over-disclosure in the safe direction — fold into the next `/privacy` edit.
