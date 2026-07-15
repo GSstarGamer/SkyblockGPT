@@ -134,12 +134,18 @@ export async function handleAuctionPage(url, env) {
     return matchesQuery && matchesCategory && matchesTier && matchesBin;
   });
 
-  if (sort === "ending") records.sort((left, right) => number(left.end) - number(right.end));
-  if (sort === "price" || sort === "price_asc") records.sort((left, right) => auctionPrice(left) - auctionPrice(right));
-  if (sort === "price_desc") records.sort((left, right) => auctionPrice(right) - auctionPrice(left));
-  const pageLowestBinAuction = [...records]
-    .filter((auction) => auction.bin === true)
-    .sort((left, right) => binPrice(left) - binPrice(right))[0] || null;
+  if (sort === "ending") {
+    records.sort((left, right) => number(left.end) - number(right.end));
+  } else if (sort === "price" || sort === "price_asc" || sort === "price_desc") {
+    const priceOf = new Map(records.map((auction) => [auction, auctionPrice(auction)]));
+    records.sort((left, right) => sort === "price_desc"
+      ? priceOf.get(right) - priceOf.get(left)
+      : priceOf.get(left) - priceOf.get(right));
+  }
+  const binRecords = records.filter((auction) => auction.bin === true);
+  const binPriceOf = new Map(binRecords.map((auction) => [auction, binPrice(auction)]));
+  const pageLowestBinAuction = [...binRecords]
+    .sort((left, right) => binPriceOf.get(left) - binPriceOf.get(right))[0] || null;
   const pagination = paginateRecords(records, resultPage, limit);
   pagination.items = await Promise.all(pagination.items.map((auction) => compactAuction(auction, detail === "full")));
 
@@ -207,7 +213,7 @@ export async function handleLowestBin(url, env) {
   const remainingPages = [];
   for (let page = startPage + 1; page < endPageExclusive; page += 1) remainingPages.push(page);
   const nameNeedle = normalizeItemSearchText(target.name);
-  const maximumCandidateDecodes = 100;
+  const decodeBudget = 60;
   const candidates = [];
   let candidateCount = 0;
   let pagesScanned = 0;
@@ -222,44 +228,39 @@ export async function handleLowestBin(url, env) {
       const searchableName = normalizeItemSearchText(`${auction.item_name || ""} ${auction.extra || ""}`);
       if (!searchableName.includes(nameNeedle)) continue;
       candidateCount += 1;
-      if (candidates.length < maximumCandidateDecodes) candidates.push(auction);
+      candidates.push(auction);
     }
   };
   collectCandidates(firstPayload);
-  for (let index = 0; index < remainingPages.length; index += 1) {
-    const pageBatch = remainingPages.slice(index, index + 1);
-    const payloadBatch = await Promise.all(pageBatch.map((page) =>
-      fetchHypixelJson("/v2/skyblock/auctions", env, { page }, {
-        authenticated: false,
-      })
-    ));
-    for (const payload of payloadBatch) collectCandidates(payload);
-  }
+  const remainingPayloads = await Promise.all(remainingPages.map((page) =>
+    fetchHypixelJson("/v2/skyblock/auctions", env, { page }, { authenticated: false })
+  ));
+  for (const payload of remainingPayloads) collectCandidates(payload);
 
-  const candidateDecodeTruncated = candidateCount > maximumCandidateDecodes;
+  // Price is a plain JSON field, so sort before decoding and decode only from
+  // the cheapest upward. The route answers "what is cheapest", so it can stop
+  // as soon as it has `limit` confirmed matches. This is ~10-20 decodes rather
+  // than every candidate, and each decode is base64 + gzip + a full NBT walk.
+  candidates.sort((left, right) => binPrice(left) - binPrice(right));
+
+  let decodesPerformed = 0;
   let decodeFailures = 0;
   const matches = [];
-  // Decode small batches and immediately discard raw NBT trees. Keeping hundreds of
-  // decoded auction blobs alive at once can exceed Cloudflare Worker's memory limit.
-  for (let index = 0; index < candidates.length; index += 5) {
-    const decodedBatch = await Promise.all(candidates.slice(index, index + 5).map(async (auction) => {
-      const decoded = await decodeInventoryBlob(auction.item_bytes);
-      return {
-        auction,
-        error: decoded.error,
-        item: decoded.records[0]?.summary || null,
-      };
-    }));
-    for (const candidate of decodedBatch) {
-      if (candidate.error || !candidate.item?.skyblock_id) {
-        decodeFailures += 1;
-        continue;
-      }
-      if (!skyBlockItemIdsMatch(candidate.item.skyblock_id, target.id)) continue;
-      matches.push({ auction: candidate.auction, item: candidate.item });
+  for (const auction of candidates) {
+    if (matches.length >= limit) break;
+    if (decodesPerformed >= decodeBudget) break;
+    decodesPerformed += 1;
+    const decoded = await decodeInventoryBlob(auction.item_bytes);
+    const item = decoded.records[0]?.summary || null;
+    if (decoded.error || !item?.skyblock_id) {
+      decodeFailures += 1;
+      continue;
     }
+    if (!skyBlockItemIdsMatch(item.skyblock_id, target.id)) continue;
+    matches.push({ auction, item });
   }
-  matches.sort((left, right) => binPrice(left.auction) - binPrice(right.auction));
+  // Candidates were sorted ascending and walked in order, so matches already are.
+  const decodeBudgetExhausted = decodesPerformed >= decodeBudget && matches.length < limit;
 
   const cheapestMatches = await Promise.all(matches.slice(0, limit).map(async ({ auction, item }) => ({
     ...await compactAuction(auction, false),
@@ -268,7 +269,7 @@ export async function handleLowestBin(url, env) {
   })));
   const segmentLowestBin = cheapestMatches[0] || null;
   const coversAllPages = startPage === 0 && endPageExclusive >= totalPages;
-  const complete = coversAllPages && snapshotConsistent && !candidateDecodeTruncated && decodeFailures === 0;
+  const complete = coversAllPages && snapshotConsistent && !decodeBudgetExhausted && decodeFailures === 0;
 
   return json({
     success: true,
@@ -293,20 +294,25 @@ export async function handleLowestBin(url, env) {
         pages_scanned: pagesScanned,
         scanned_through_page: endPageExclusive - 1,
         next_start_page: endPageExclusive < totalPages ? endPageExclusive : null,
+        segments_required: Math.ceil(totalPages / maxPages),
+        segment_index: Math.floor(startPage / maxPages),
         covers_all_pages: coversAllPages,
         complete,
         name_prefilter_candidates: candidateCount,
-        candidate_decode_truncated: candidateDecodeTruncated,
+        decodes_performed: decodesPerformed,
+        decode_budget: decodeBudget,
+        decode_budget_exhausted: decodeBudgetExhausted,
         decode_failures: decodeFailures,
       },
       match_count_in_segment: matches.length,
+      match_count_is_lower_bound: true,
       price_order: "ascending",
       segment_lowest_bin: segmentLowestBin,
       authoritative_lowest_bin: complete ? segmentLowestBin : null,
       auctions: cheapestMatches,
       warning: complete
         ? null
-        : "This scan is not yet authoritative. Continue from next_start_page using the same expected_last_updated, or restart if the snapshot changed.",
+        : "This scan is not yet authoritative. Continue from next_start_page using the same expected_last_updated, keeping the lowest segment_lowest_bin seen so far, or restart if the snapshot changed.",
     },
   });
 }
