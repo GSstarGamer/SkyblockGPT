@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import * as levels from "../../src/levels.js";
 import {
   CATACOMBS_COSMETIC_LEVEL_XP,
   CATACOMBS_LADDER,
   DUNGEON_CLASS_LADDER,
   GOLDEN_DRAGON_LADDER,
-  LADDER_AUTHORITY,
-  LADDER_AUTHORITY_CORROBORATED,
   LADDER_AUTHORITY_WIKI,
   LADDER_SOURCES,
   PET_LADDERS,
@@ -60,15 +57,16 @@ export async function run() {
   assert.equal(max.source_authority, null, "authority defaults to null, not wiki");
   assert.equal(max.source_url, null, "source_url defaults to null");
 
-  // A caller can declare a different authority and cite a source page.
-  const corroborated = levelFromLadder(400, ladder, {
+  // A caller can declare any authority and cite a source page -- levelFromLadder
+  // echoes back whatever it is handed rather than hardcoding "wiki".
+  const declared = levelFromLadder(400, ladder, {
     maxLevel: 3,
     tableVersion: "test-1",
-    authority: LADDER_AUTHORITY_CORROBORATED,
+    authority: "some_other_authority",
     sourceUrl: "https://example.test/source",
   });
-  assert.equal(corroborated.source_authority, LADDER_AUTHORITY_CORROBORATED);
-  assert.equal(corroborated.source_url, "https://example.test/source");
+  assert.equal(declared.source_authority, "some_other_authority");
+  assert.equal(declared.source_url, "https://example.test/source");
 
   // Missing XP is unavailable, never zero (AGENTS.md rule 5).
   const missing = levelFromLadder(null, ladder, options);
@@ -81,14 +79,14 @@ export async function run() {
   assert.equal(missing.source_authority, null, "unavailable defaults to null, not wiki authority");
   assert.equal(missing.source_url, null, "unavailable defaults to null source_url");
 
-  const missingCorroborated = levelFromLadder(null, ladder, {
+  const missingDeclared = levelFromLadder(null, ladder, {
     ...options,
-    authority: LADDER_AUTHORITY_CORROBORATED,
+    authority: "some_other_authority",
     sourceUrl: "https://example.test/source",
   });
-  assert.equal(missingCorroborated.available, false);
-  assert.equal(missingCorroborated.source_authority, LADDER_AUTHORITY_CORROBORATED);
-  assert.equal(missingCorroborated.source_url, "https://example.test/source");
+  assert.equal(missingDeclared.available, false);
+  assert.equal(missingDeclared.source_authority, "some_other_authority");
+  assert.equal(missingDeclared.source_url, "https://example.test/source");
 
   // An empty ladder cannot derive anything and must say so.
   const empty = levelFromLadder(500, [], options);
@@ -275,64 +273,78 @@ export async function run() {
     "equal by value, but must stay a separate table so a catacombs-only fix cannot silently move class levels",
   );
 
-  // Class data is the one ladder not from the authoritative wiki. A later phase
-  // must be able to surface that rather than pass it off as wiki-sourced.
-  assert.equal(levels.LADDER_AUTHORITY.catacombs, levels.LADDER_AUTHORITY_WIKI);
-  assert.equal(levels.LADDER_AUTHORITY.dungeon_class, levels.LADDER_AUTHORITY_CORROBORATED);
-  assert.notEqual(
-    levels.LADDER_AUTHORITY.dungeon_class,
-    levels.LADDER_AUTHORITY_WIKI,
-    "class ladder must not claim wiki authority",
-  );
+  // Owner decision: both wikis are acceptable sources for ladder data, so the
+  // class ladder's authority is "wiki" like every other ladder now -- which
+  // wiki it actually came from lives in sourceUrl, not in a separate
+  // authority tier. (A prior pass used a distinct LADDER_AUTHORITY_CORROBORATED
+  // value here; that tier is retired because it no longer distinguishes
+  // anything.)
+  assert.equal(LADDER_SOURCES.catacombs.authority, LADDER_AUTHORITY_WIKI);
+  assert.equal(LADDER_SOURCES.dungeon_class.authority, LADDER_AUTHORITY_WIKI);
 
   // A consumer wiring DUNGEON_CLASS_LADDER must pass its recorded authority, and
-  // the result must actually carry it -- not silently fall back to the wiki
-  // default. This is the assertion that would have caught the original bug: if
-  // the authority option is ever dropped from levelFromLadder, this fails while
-  // the LADDER_AUTHORITY map assertions above keep passing.
+  // the result must actually carry it -- not silently fall back to a default
+  // that happens to match. This is the assertion that would have caught the
+  // original bug: if the authority option is ever dropped from
+  // levelFromLadder, this fails.
   const classResult = levelFromLadder(400, DUNGEON_CLASS_LADDER, {
     maxLevel: 50,
     tableVersion: TABLE_VERSION,
-    authority: LADDER_AUTHORITY["dungeon_class"],
+    authority: LADDER_SOURCES.dungeon_class.authority,
   });
   assert.equal(
     classResult.source_authority,
-    "corroborated_secondary",
-    "class ladder result must report corroborated_secondary authority",
-  );
-  assert.notEqual(
-    classResult.source_authority,
     LADDER_AUTHORITY_WIKI,
-    "class ladder result must not claim wiki authority",
+    "class ladder result reports wiki authority, per the owner's both-wikis decision",
+  );
+
+  // The frozen-source fact survives even though the authority tier is gone:
+  // wiki.hypixel.net's SkyBlock pages are unmaintained, so the class ladder
+  // must still record which revision it was read from, so a future
+  // re-verification knows the page has not been touched since. This is not a
+  // confidence caveat for users -- it is a maintenance note.
+  assert.equal(
+    LADDER_SOURCES.dungeon_class.sourceRevision,
+    "2024-11-11",
+    "class ladder must record its frozen source revision for future re-verification",
+  );
+  assert.equal(
+    LADDER_SOURCES.catacombs.sourceRevision,
+    null,
+    "hypixelskyblock.minecraft.wiki is a live wiki with no single frozen revision to cite",
   );
 
   // -------------------------------------------------------------------------
-  // LADDER_SOURCES: every ladder bundled with the authority, source URL and
-  // cap a caller needs, so a consumer cannot pair a ladder with the wrong
-  // authority, forget the URL, or forget the option entirely.
+  // LADDER_SOURCES: every ladder bundled with the authority, source URL, cap
+  // and source revision a caller needs, so a consumer cannot pair a ladder
+  // with the wrong authority, forget the URL, or forget the option entirely.
   // -------------------------------------------------------------------------
-  const validAuthorities = new Set([LADDER_AUTHORITY_WIKI, LADDER_AUTHORITY_CORROBORATED]);
   for (const [name, src] of Object.entries(LADDER_SOURCES)) {
     assert.ok(Array.isArray(src.ladder) && src.ladder.length > 0, `${name} has a real ladder`);
     assert.ok(src.sourceUrl, `${name} has a non-null sourceUrl`);
-    assert.ok(
-      validAuthorities.has(src.authority),
-      `${name} authority is one of the two exported LADDER_AUTHORITY constants`,
+    assert.equal(
+      src.authority,
+      LADDER_AUTHORITY_WIKI,
+      `${name} authority is the one exported LADDER_AUTHORITY_WIKI constant -- both wikis are acceptable for ladder data`,
     );
     assert.equal(
       src.maxLevel,
       src.ladder.length,
       `${name} maxLevel matches its ladder's actual length`,
     );
+    assert.ok(
+      "sourceRevision" in src,
+      `${name} must declare sourceRevision (even null) so the frozen-source fact cannot be silently dropped later`,
+    );
   }
 
-  // The one entry that must not claim pinned-wiki authority: DUNGEON_CLASS_LADDER
-  // came from wiki.hypixel.net, not hypixelskyblock.minecraft.wiki (AGENTS.md
-  // rule 4), which publishes no class ladder at all.
-  assert.equal(LADDER_SOURCES.dungeon_class.authority, LADDER_AUTHORITY_CORROBORATED);
+  // The one entry sourced from wiki.hypixel.net rather than
+  // hypixelskyblock.minecraft.wiki (AGENTS.md rule 4), which publishes no
+  // class ladder at all. Both wikis are acceptable for ladder data, so this
+  // no longer changes its authority -- only its sourceUrl and sourceRevision.
   assert.ok(
     LADDER_SOURCES.dungeon_class.sourceUrl.includes("wiki.hypixel.net"),
-    "dungeon_class source points at the secondary wiki, not the pinned one",
+    "dungeon_class source points at wiki.hypixel.net -- recorded in sourceUrl, not a separate authority tier",
   );
 
   // A caller wiring LADDER_SOURCES cannot forget provenance: spreading an

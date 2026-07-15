@@ -307,15 +307,16 @@ export async function run() {
   const catacombsLadder = dungeonProvenance.ladders[catacombsLevel.ladder];
   assert.equal(catacombsLadder.source_authority, "wiki");
 
-  // dungeon_class is corroborated from a secondary, frozen wiki rather than
-  // read directly off the authoritative wiki (see levels.js) -- the one
-  // ladder here that must not claim pinned-wiki authority. Hoisting
-  // source_authority up to level_provenance's top level (rather than keeping
-  // it per-ladder) would silently relabel this as "wiki", so this is the
-  // assertion that would catch that regression.
+  // dungeon_class comes from wiki.hypixel.net rather than the pinned
+  // hypixelskyblock.minecraft.wiki (see levels.js), but the owner has decided
+  // both wikis are acceptable sources for ladder data, so its authority is
+  // "wiki" like every other ladder. Which wiki it actually came from still
+  // lives in source_url, kept per-ladder rather than hoisted to
+  // level_provenance's top level -- this is the assertion that would catch a
+  // regression that flattened it away.
   const classLadder = dungeonProvenance.ladders[tankLevel.ladder];
-  assert.equal(classLadder.source_authority, "corroborated_secondary", "dungeon_class must not claim wiki authority");
-  assert.notEqual(classLadder.source_authority, "wiki");
+  assert.equal(classLadder.source_authority, "wiki", "both wikis are acceptable for ladder data (owner decision)");
+  assert.ok(classLadder.source_url.includes("wiki.hypixel.net"), "source_url still records which wiki this ladder came from");
 
   // bestiary's payload_truncated flag: false for a small, ordinary fixture...
   installMockFetch({

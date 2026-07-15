@@ -15,7 +15,7 @@ Several sections cap by size and flag it. Treat `true` as partial data, not the 
 ## Slayer and dungeon levels
 
 - `section=slayers` and `section=dungeons` return derived levels from static tables, not from any Hypixel resource — Hypixel publishes XP thresholds for skills only via its `skills` resource. Each item's `level` object (`available`, `level`, `level_with_progress`, `xp_into_level`, `xp_for_next_level`, `progress_to_next_level`) carries a `ladder` pointer into the section's single `level_provenance.ladders` map.
-- Check `level_provenance.ladders[ladder].source_authority` before citing a level. Every ladder is `wiki` except dungeon-class player levels (`dungeon_class`), which is `corroborated_secondary`, sourced from `wiki.hypixel.net` — the pinned wiki publishes no class-leveling page. Say where a class level came from if it matters to the answer.
+- Every ladder is `source_authority: wiki` and carries a `source_url` in `level_provenance.ladders[ladder]` — derived levels come from static tables, not a Hypixel endpoint. Verify against that `source_url` when a level is load-bearing (dungeon-class player levels are sourced from `wiki.hypixel.net`, since the pinned wiki publishes no class-leveling page; every other ladder is from the pinned wiki).
 - `dungeons` splits `dungeon_types` (only Catacombs has a sourced ladder; other dungeon types report level unavailable) from `player_classes` (all five classes share the `dungeon_class` ladder).
 - `level.available: false` means the level could not be derived (no XP exposed, or no matching ladder); never report it as level 0.
 

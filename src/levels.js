@@ -78,38 +78,46 @@ export const CATACOMBS_LADDER = [
 export const CATACOMBS_COSMETIC_LEVEL_XP = 200000000;
 
 // ---------------------------------------------------------------------------
-// Ladder authority. Every other table in this module comes from the wiki this
-// repo designates as authoritative (AGENTS.md rule 4:
-// hypixelskyblock.minecraft.wiki). DUNGEON_CLASS_LADDER does not -- that wiki
-// publishes no class ladder -- so its provenance is weaker and must not be
-// silently equated with the rest. levelFromLadder reports a single
-// level_source/verify_on_wiki for all ladders; until that can carry authority
-// too, consumers look the ladder up here.
+// Ladder authority. Owner decision: for ladder data specifically, both
+// hypixelskyblock.minecraft.wiki (the wiki AGENTS.md rule 4 pins for item
+// mechanics) and wiki.hypixel.net are acceptable sources -- rule 4 itself is
+// unchanged and still governs item-mechanics verification; this is narrower.
+// Every ladder below reports the same authority. Which wiki a given ladder
+// actually came from lives in LADDER_SOURCES[key].sourceUrl, not in a second
+// authority tier.
+//
+// A prior pass used a second value, LADDER_AUTHORITY_CORROBORATED, to flag
+// DUNGEON_CLASS_LADDER as secondary-sourced and weaker evidence. That tier is
+// retired: it no longer distinguishes anything now that both wikis are
+// accepted. The one fact it was also protecting -- that DUNGEON_CLASS_LADDER's
+// source page is frozen and effectively unmaintained -- still matters for
+// whoever re-verifies the table, so it survives as
+// LADDER_SOURCES.dungeon_class.sourceRevision, a maintenance note rather than
+// a confidence caveat.
 // ---------------------------------------------------------------------------
 
-// Transcribed from the wiki named in AGENTS.md rule 4.
+// The one static-table authority value. Kept as a named constant, rather than
+// the literal "wiki" repeated in every LADDER_SOURCES entry below, so a typo
+// cannot silently mint a second value and so callers/tests can compare
+// against it instead of a magic string.
 export const LADDER_AUTHORITY_WIKI = "wiki";
-// From a secondary source, accepted only because that source also publishes a
-// table we already verified independently, and matches it exactly.
-export const LADDER_AUTHORITY_CORROBORATED = "corroborated_secondary";
-
-export const LADDER_AUTHORITY = {
-  slayer: LADDER_AUTHORITY_WIKI,
-  catacombs: LADDER_AUTHORITY_WIKI,
-  dungeon_class: LADDER_AUTHORITY_CORROBORATED,
-  pets: LADDER_AUTHORITY_WIKI,
-  golden_dragon: LADDER_AUTHORITY_WIKI,
-};
 
 // Source: https://wiki.hypixel.net/Classes (section "Leveling", the "XP
 // Required" table, "Total" column), revision of 2024-11-11.
 //
-// NOT the wiki this repo treats as authoritative. hypixelskyblock.minecraft.wiki
-// still publishes no class ladder: /Classes, /Healer and /Dungeoneering (plus its
-// only subpages /Leveling_Rewards and /Skill_UI) give per-level *rewards* only.
-// wiki.hypixel.net is a second, Hypixel-hosted wiki whose SkyBlock pages have
-// been frozen since November 2024. Hence LADDER_AUTHORITY_CORROBORATED, not
-// LADDER_AUTHORITY_WIKI.
+// hypixelskyblock.minecraft.wiki still publishes no class ladder: /Classes,
+// /Healer and /Dungeoneering (plus its only subpages /Leveling_Rewards and
+// /Skill_UI) give per-level *rewards* only. wiki.hypixel.net is a second,
+// Hypixel-hosted wiki, and the owner has decided both wikis are acceptable
+// sources for ladder data (AGENTS.md rule 4 governs item-mechanics
+// verification and is unaffected by that decision).
+//
+// What still matters is a maintenance fact, not a confidence caveat:
+// wiki.hypixel.net's SkyBlock pages have been frozen since November 2024, so
+// a class-XP change made after that date would not appear there. That is
+// recorded as LADDER_SOURCES.dungeon_class.sourceRevision ("2024-11-11") for
+// whoever re-verifies this table if Hypixel ever changes class leveling --
+// it is not a reason to qualify an answer to a user.
 //
 // It is trusted here only because it is checkable. The same wiki's /Dungeoneering
 // page publishes a *separate* Catacombs "XP Required" table, and all 50 of its
@@ -251,6 +259,13 @@ export const GOLDEN_DRAGON_LADDER = (() => {
 // maxLevel is each ladder's own .length: every ladder here tabulates exactly up
 // to its cap, with no padding past it, so the cap does not need restating by
 // hand (and cannot drift from the ladder it is paired with).
+//
+// sourceRevision records the specific page revision a ladder was transcribed
+// from, when the source comment above names one. Only dungeon_class does --
+// wiki.hypixel.net's SkyBlock pages are frozen, so that page is pinned to a
+// specific, dated revision rather than "the current page". Every other
+// ladder comes from a live wiki with no single frozen revision to cite, so
+// their sourceRevision is null -- honest, not invented.
 // ---------------------------------------------------------------------------
 export const LADDER_SOURCES = {
   slayer_zombie: {
@@ -258,90 +273,107 @@ export const LADDER_SOURCES = {
     maxLevel: SLAYER_LADDERS.zombie.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+    sourceRevision: null,
   },
   slayer_spider: {
     ladder: SLAYER_LADDERS.spider,
     maxLevel: SLAYER_LADDERS.spider.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+    sourceRevision: null,
   },
   slayer_wolf: {
     ladder: SLAYER_LADDERS.wolf,
     maxLevel: SLAYER_LADDERS.wolf.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+    sourceRevision: null,
   },
   slayer_enderman: {
     ladder: SLAYER_LADDERS.enderman,
     maxLevel: SLAYER_LADDERS.enderman.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+    sourceRevision: null,
   },
   slayer_blaze: {
     ladder: SLAYER_LADDERS.blaze,
     maxLevel: SLAYER_LADDERS.blaze.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+    sourceRevision: null,
   },
   slayer_vampire: {
     ladder: SLAYER_LADDERS.vampire,
     maxLevel: SLAYER_LADDERS.vampire.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+    sourceRevision: null,
   },
   catacombs: {
     ladder: CATACOMBS_LADDER,
     maxLevel: CATACOMBS_LADDER.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Dungeoneering/Leveling_Rewards",
+    sourceRevision: null,
   },
   dungeon_class: {
     ladder: DUNGEON_CLASS_LADDER,
     maxLevel: DUNGEON_CLASS_LADDER.length,
-    authority: LADDER_AUTHORITY_CORROBORATED,
+    authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://wiki.hypixel.net/Classes",
+    // Frozen source page (see the ladder's own comment above). Maintenance
+    // fact for re-verification, not a confidence caveat for users.
+    sourceRevision: "2024-11-11",
   },
   pet_common: {
     ladder: PET_LADDERS.common,
     maxLevel: PET_LADDERS.common.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+    sourceRevision: null,
   },
   pet_uncommon: {
     ladder: PET_LADDERS.uncommon,
     maxLevel: PET_LADDERS.uncommon.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+    sourceRevision: null,
   },
   pet_rare: {
     ladder: PET_LADDERS.rare,
     maxLevel: PET_LADDERS.rare.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+    sourceRevision: null,
   },
   pet_epic: {
     ladder: PET_LADDERS.epic,
     maxLevel: PET_LADDERS.epic.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+    sourceRevision: null,
   },
   pet_legendary: {
     ladder: PET_LADDERS.legendary,
     maxLevel: PET_LADDERS.legendary.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+    sourceRevision: null,
   },
   pet_mythic: {
     ladder: PET_LADDERS.mythic,
     maxLevel: PET_LADDERS.mythic.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+    sourceRevision: null,
   },
   golden_dragon: {
     ladder: GOLDEN_DRAGON_LADDER,
     maxLevel: GOLDEN_DRAGON_LADDER.length,
     authority: LADDER_AUTHORITY_WIKI,
     sourceUrl: "https://hypixelskyblock.minecraft.wiki/Golden_Dragon_Pet",
+    sourceRevision: null,
   },
 };
 
@@ -369,10 +401,12 @@ function unavailable(experience, tableVersion, authority, sourceUrl) {
  * @param {number|null} experience Total accumulated XP, or null when the API did not expose it.
  * @param {number[]} ladder Cumulative XP required to reach level 1, 2, 3, ...
  * @param {{ maxLevel?: number, tableVersion: string, authority?: string|null, sourceUrl?: string|null }} options
- *   `authority` distinguishes which wiki a ladder came from (see LADDER_AUTHORITY
- *   and LADDER_SOURCES below). It defaults to null, NOT LADDER_AUTHORITY_WIKI:
- *   undeclared provenance must read as unknown, never as a confident claim of
- *   authoritative sourcing. It is never inferred from the ladder's contents.
+ *   `authority` marks a ladder as sourced from a static wiki table (see
+ *   LADDER_SOURCES below); which wiki it came from is recorded in sourceUrl,
+ *   not in authority -- both wikis are acceptable sources for ladder data. It
+ *   defaults to null, NOT LADDER_AUTHORITY_WIKI: undeclared provenance must
+ *   read as unknown, never as a confident claim of sourcing. It is never
+ *   inferred from the ladder's contents.
  *   Callers should prefer spreading an entry from LADDER_SOURCES rather than
  *   passing `authority`/`sourceUrl` by hand, so a ladder cannot be paired with
  *   the wrong authority or the option cannot be forgotten silently.

@@ -936,10 +936,12 @@ function pointerLevel(experience, ladderKey, usedLadders) {
 }
 
 // level_source, table_version and verify_on_wiki are identical across every
-// current ladder, so they sit at the top level. source_authority and
-// source_url vary per ladder (dungeon_class is corroborated_secondary, every
-// other ladder is wiki) so they stay inside ladders[key] -- flattening them
-// upward would relabel a secondary-wiki table as authoritative.
+// current ladder, so they sit at the top level. source_authority is now also
+// identical for every ladder ("wiki": both hypixelskyblock.minecraft.wiki and
+// wiki.hypixel.net are acceptable sources for ladder data), but source_url
+// still varies per ladder -- it is the only place the which-wiki fact lives
+// -- so both stay inside ladders[key] rather than being split across two
+// levels.
 function buildLevelProvenance(usedLadders) {
   const ladders = {};
   for (const key of usedLadders) {

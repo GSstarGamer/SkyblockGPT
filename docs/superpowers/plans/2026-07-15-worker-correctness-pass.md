@@ -1861,25 +1861,25 @@ Not in this plan. Needs its own, written after this branch merges.
 
 This section is the durable record. The SDD progress ledger under `.superpowers/sdd/` is gitignored scratch — it does not survive a fresh clone or `git clean -fdx`. Anything that must not be lost lives here, in git.
 
-### Blocking prerequisite — do this before wiring `levels.js` into any response
+### Blocking prerequisite — resolved: both wikis are acceptable for ladder data
 
-`src/levels.js` is the only module in the Worker that reports numbers no API provides. Its ladders come from two different sources and `LADDER_AUTHORITY` records which is which:
+`src/levels.js` is the only module in the Worker that reports numbers no API provides. Its ladders come from two different wikis:
 
-- `slayer`, `catacombs`, `pets`, `golden_dragon` → `"wiki"`, from `hypixelskyblock.minecraft.wiki`, the wiki `AGENTS.md` rule 4 pins.
-- `dungeon_class` → `"corroborated_secondary"`, from `wiki.hypixel.net/Classes` (revision 2024-11-11). **The pinned wiki publishes no class ladder at all.** It was accepted only because that same secondary source also publishes a Catacombs table matching our independently-verified `CATACOMBS_LADDER` on all 50 values.
+- `slayer`, `catacombs`, `pets`, `golden_dragon` — from `hypixelskyblock.minecraft.wiki`, the wiki `AGENTS.md` rule 4 pins.
+- `dungeon_class` — from `wiki.hypixel.net/Classes` (revision 2024-11-11). **The pinned wiki publishes no class ladder at all**, so there was never a better source to prefer. That same secondary source also publishes a Catacombs table matching our independently-verified `CATACOMBS_LADDER` on all 50 values.
 
-`levelFromLadder` reports `source_authority: null` when a caller does not declare one — undeclared provenance reads unknown, never authoritative. **Consumers must pass authority.** Use `LADDER_SOURCES`, which pairs every ladder with its authority, source URL, and cap so they cannot be mismatched:
+**Owner decision: for ladder data specifically, both wikis are acceptable.** `LADDER_AUTHORITY_WIKI` (`"wiki"`) is the single authority value every `LADDER_SOURCES` entry reports, including `dungeon_class` — the old second, weaker tier (`corroborated_secondary`) is retired, and a future reader must not re-litigate it or reintroduce a hedge on which wiki a class level came from. `AGENTS.md` rule 4 is unaffected: it still governs item-mechanics verification, not ladder data. Which wiki a given ladder came from now lives only in `LADDER_SOURCES[key].sourceUrl`.
+
+`levelFromLadder` reports `source_authority: null` when a caller does not declare one — undeclared provenance reads unknown, never sourced. **Consumers must pass authority.** Use `LADDER_SOURCES`, which pairs every ladder with its authority, source URL, cap, and source revision so they cannot be mismatched:
 
 ```js
 const source = LADDER_SOURCES.dungeon_class;
 levelFromLadder(xp, source.ladder, { ...source, tableVersion: TABLE_VERSION });
 ```
 
-A response that derives a class level must not present it as pinned-wiki-sourced. Surface `source_authority` so the GPT can qualify the claim.
+One data caveat survives the decision above unchanged — it is about the source page's staleness, not about which wiki it is, so the owner's decision does not resolve it:
 
-Two data caveats that ride along:
-
-- **Class ladder staleness is one-directional.** Its source is frozen at Nov 2024. The `deepEqual` tripwire in `levels.test.mjs` catches Catacombs-side drift, but nothing re-verifies the class table against a live class source, because none exists. An in-game class-only change would fire no assertion. Inherent to the data, not a defect.
+- **Class ladder staleness is one-directional.** Its source, `wiki.hypixel.net/Classes`, is frozen at Nov 2024 (recorded as `LADDER_SOURCES.dungeon_class.sourceRevision`), and that wiki's SkyBlock pages are effectively unmaintained. The `deepEqual` tripwire in `levels.test.mjs` catches Catacombs-side drift, but nothing re-verifies the class table against a live class source, because none exists. An in-game class-only change would fire no assertion. This is a maintenance fact for whoever re-verifies the table — not a reason to qualify an answer to a user.
 - **`level_with_progress` rounding.** `round(99 + 0.99999947, 4)` yields `100`, so a Golden Dragon can report level 100 — a level the wiki says cannot exist. Generic to any ladder within ~0.005% of a threshold.
 
 ### Spec finding #6 is only half-closed
