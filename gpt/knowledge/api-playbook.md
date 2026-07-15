@@ -2,6 +2,30 @@
 
 Which Worker operation to call per domain, and how to paginate. Follow this exactly. Never guess an operation name or parameter.
 
+## Truncated payloads
+
+Several sections cap by size and flag it. Treat `true` as partial data, not the full record:
+
+- Bestiary and Rift sections: `payload_truncated`.
+- `stats`: `lifetime_counters_truncated` on the lifetime counters map.
+- `garden`: `garden_truncated`.
+- Museum items: each entry's `decoded_items_truncated` (a multi-item donation exceeded the per-entry cap).
+- Any decoded item (gear, inventories, accessories, museum, auctions): `attributes_truncated` / `enchantments_truncated` when it carries more than the capped list.
+
+## Slayer and dungeon levels
+
+- `section=slayers` and `section=dungeons` return derived levels from static tables, not from any Hypixel resource — Hypixel publishes XP thresholds for skills only via its `skills` resource. Each item's `level` object (`available`, `level`, `level_with_progress`, `xp_into_level`, `xp_for_next_level`, `progress_to_next_level`) carries a `ladder` pointer into the section's single `level_provenance.ladders` map.
+- Check `level_provenance.ladders[ladder].source_authority` before citing a level. Every ladder is `wiki` except dungeon-class player levels (`dungeon_class`), which is `corroborated_secondary`, sourced from `wiki.hypixel.net` — the pinned wiki publishes no class-leveling page. Say where a class level came from if it matters to the answer.
+- `dungeons` splits `dungeon_types` (only Catacombs has a sourced ladder; other dungeon types report level unavailable) from `player_classes` (all five classes share the `dungeon_class` ladder).
+- `level.available: false` means the level could not be derived (no XP exposed, or no matching ladder); never report it as level 0.
+
+## Pets
+
+- `section=pets` returns an object, not a list: `available`, `total_pets`, `returned`, `truncated`, `truncation_reason`, `level_provenance`, `pets`, `reason`. It is budgeted by response size, so a large collection truncates.
+- `total_pets` is always the player's true pet count; `returned` is only how many pets came back this call. Never report `returned` as the total.
+- When `truncated` is true, say the pet list is partial and name why (`truncation_reason`: `response_size_budget` or `pet_count_cap`).
+- Pet levels use the same `level`/`level_provenance` shape as slayers and dungeons, keyed by rarity ladder (or `golden_dragon` for that pet).
+
 ## Reviews
 
 - Mining review: call summary, `mining`, `stats`, `gear`, and the inventory index. `mining` carries HotM.
