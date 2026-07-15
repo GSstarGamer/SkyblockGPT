@@ -10,6 +10,7 @@ Use this file after reading `AGENTS.md` and `docs/PROJECT_CONTEXT.md`.
 | Add/change route, parameter, operation, or response field | Yes | Yes | Yes | Usually | Yes | Yes |
 | Change interpretation/calling strategy only | No | Maybe | Maybe | Yes | Yes | No |
 | Change description/starters/auth notes | No | No | No | `gpt/config.md` | Yes | No |
+| Change per-domain procedure, formula, or market steps | No | Maybe | Maybe | `gpt/knowledge/*.md` | Yes, re-upload the file | No |
 | Change username lookup | Maybe | Username schema | Relevant test/validation | Maybe | Yes | Only if Worker also changed |
 | Change SkyCofl operations | No | SkyCofl schema | Validation/contract fixture | Yes | Yes | No |
 | Change Cloudflare deployment | Maybe | No | CI/dry-run | No | No | Workflow-dependent |
@@ -75,12 +76,13 @@ For large lists, prefer a dedicated typed/pageable endpoint instead of overloadi
 
 ## GPT instruction update
 
-1. Edit `gpt/instructions.md`.
-2. Keep rules direct and operational; move background/reference prose to `docs/`.
-3. Run `npm run validate` and confirm the printed character count is below 8,000.
-4. Paste the complete file into GPT Builder Instructions.
-5. Preview the affected call/answer behavior.
-6. Click **Update** and test again in a fresh chat.
+1. Decide where the rule belongs. Must it apply to every answer? It goes in `gpt/instructions.md`, which is always in context. Is it procedure the model needs only when a specific topic comes up? It goes in `gpt/knowledge/*.md`, which is retrieved on demand. When a procedure lives in Knowledge, its safety invariant still stays in the instructions.
+2. Edit `gpt/instructions.md` and/or the matching Knowledge file. Keep rules direct and operational; move background prose to `docs/`.
+3. Run `npm run validate`. Confirm the printed character count is below 8,000 and that no pointer/file mismatch is reported.
+4. Paste the complete `gpt/instructions.md` into GPT Builder Instructions.
+5. Re-upload every changed `gpt/knowledge/` file, replacing the old copy. A stale Knowledge file reports no error; the GPT silently follows outdated procedure.
+6. Preview the affected call/answer behavior. For a Knowledge change, ask a question that should trigger retrieval and confirm the new procedure is followed.
+7. Click **Update** and test again in a fresh chat.
 
 ## Action-schema-only update
 

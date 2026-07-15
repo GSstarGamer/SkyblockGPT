@@ -36,5 +36,19 @@ An unofficial Hypixel SkyBlock assistant that checks live profiles, HotM/HotF, s
    - Value: the raw SkyCofl account token, without `Bearer` or quotes
    - Privacy policy: `https://coflnet.com/privacy`
 
-Paste `gpt/instructions.md` into the GPT's Instructions field. Never put credentials in this repository.
+## Knowledge
+
+Upload every file in `gpt/knowledge/` to the GPT's Knowledge section:
+
+- `api-playbook.md`
+- `calculations.md`
+- `market-playbook.md`
+
+The instructions name these files and tell the GPT to open the matching one before acting. Renaming a file without updating the instructions breaks retrieval; `npm test` fails if the two disagree.
+
+Conversations can reveal Knowledge file contents to users. These files hold only public behavior rules, and no credential may ever be placed in them.
+
+## Sync steps
+
+Paste `gpt/instructions.md` into the GPT's Instructions field, and replace any changed Knowledge upload with its current copy. A stale Knowledge file produces no error—the GPT just follows outdated procedure. Never put credentials in this repository.
 

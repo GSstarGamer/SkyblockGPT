@@ -64,6 +64,21 @@ if (instructions.length > 8_000) {
   errors.push(`gpt/instructions.md: ${instructions.length} characters exceeds 8000`);
 }
 
+// Knowledge files are uploaded separately in GPT Builder. A pointer without a file
+// makes the GPT stop mid-answer; a file without a pointer never gets retrieved.
+const knowledgeFiles = readdirSync(resolve(root, "gpt/knowledge")).filter((name) => name.endsWith(".md"));
+const referenced = [...instructions.matchAll(/`([\w-]+\.md)`/g)].map((match) => match[1]);
+for (const name of new Set(referenced)) {
+  if (!knowledgeFiles.includes(name)) {
+    errors.push(`gpt/instructions.md references \`${name}\`, which is missing from gpt/knowledge/`);
+  }
+}
+for (const name of knowledgeFiles) {
+  if (!referenced.includes(name)) {
+    errors.push(`gpt/knowledge/${name} is never referenced by gpt/instructions.md`);
+  }
+}
+
 const workerSources = [];
 const collectWorkerSources = (directory) => {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -92,6 +107,7 @@ if (errors.length) {
 console.log(JSON.stringify({
   success: true,
   instruction_characters: instructions.length,
+  knowledge_files: knowledgeFiles,
   actions: actionFiles.map((relativePath) => {
     const document = JSON.parse(readFileSync(resolve(root, relativePath), "utf8"));
     return {

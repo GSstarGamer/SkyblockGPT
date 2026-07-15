@@ -14,7 +14,8 @@ The project is public and globally used. Never hard-code a player identity, prof
 - `actions/hypixel-worker.openapi.json`: ChatGPT contract for the Worker.
 - `actions/minecraft-username.openapi.json`: direct username-to-UUID Action.
 - `actions/skycofl.openapi.json`: direct SkyCofl history/AH Action.
-- `gpt/instructions.md`: production Custom GPT behavior; hard limit of 8,000 characters.
+- `gpt/instructions.md`: production Custom GPT behavior; hard limit of 8,000 characters. Holds policy that must apply to every answer.
+- `gpt/knowledge/*.md`: Custom GPT Knowledge uploads holding reference procedure (per-domain operations, formulas, market steps). Retrieved on demand, so never put a rule here that must fire on every answer. Uploaded content is user-extractable: never place a credential in these files.
 - `gpt/config.md`: public name, description, conversation starters, capabilities, authentication, and privacy URLs.
 - `scripts/test-worker.mjs`: mocked integration coverage for Worker behavior.
 - `scripts/validate.mjs`: ChatGPT/OpenAPI compatibility checks.
@@ -89,6 +90,7 @@ While editing:
 - Add focused mocked integration assertions for bug fixes and new behavior.
 - Keep schemas compact; expose filters/pagination instead of giant result sets.
 - Update `gpt/instructions.md` only for behavior the model must know. Keep reference material in docs rather than consuming the 8,000-character instruction budget.
+- Split rule for GPT content: policy and invariants go in `gpt/instructions.md` because they are always in context; reference procedure goes in `gpt/knowledge/*.md` because it is only retrieved when a query matches. When a procedure moves to Knowledge, its safety invariant stays in the instructions. Every Knowledge file must be referenced by name from the instructions, and `scripts/validate.mjs` enforces that both ways.
 - Update `docs/PROJECT_CONTEXT.md` when architecture, providers, secrets, endpoints, or durable product requirements change.
 
 Required verification:
@@ -108,6 +110,7 @@ Use `npm ci` in clean/CI environments. Do not deploy code that fails either sche
 - Production base URL: `https://skyblock-gpt-proxy.girishsonic8.workers.dev`.
 - Worker changes that keep the Action contract stable require no GPT edit.
 - Changes under `actions/` or `gpt/` require a manual edit in the ChatGPT web GPT Builder followed by Preview tests and **Update**. There is no supported automated Custom GPT configuration update in this repository.
+- A change under `gpt/knowledge/` requires re-uploading that file in GPT Builder's Knowledge section, replacing the old copy. A stale Knowledge file fails silently: the GPT retrieves outdated procedure and reports no error. Re-upload every changed file before pressing **Update**.
 - Do not create a second Worker Action set: ChatGPT rejects duplicate domains. Replace the schema in the existing Worker Action.
 - After a production change, test `/health` and one narrow authenticated route without exposing the header in public logs.
 
