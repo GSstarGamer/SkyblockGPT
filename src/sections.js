@@ -97,13 +97,18 @@ export async function compactMuseum(profileData, query, page, limit) {
   const pagination = paginateRecords(filtered, page, limit);
 
   // Decode only this page. Museums hold hundreds of items; decoding all of them
-  // would be base64 + gzip + a full NBT walk each.
+  // would be base64 + gzip + a full NBT walk each. A single entry can hold more
+  // than one item — a donated armor set carries every piece in one blob — so
+  // report the whole list rather than just the first.
   const items = await Promise.all(pagination.items.map(async ({ blob, ...entry }) => {
-    if (!blob) return { ...entry, item: null, decode_error: null };
+    if (!blob) {
+      return { ...entry, blob_present: false, decoded_items: [], decode_error: null };
+    }
     const decoded = await decodeInventoryBlob(blob);
     return {
       ...entry,
-      item: decoded.records[0]?.summary || null,
+      blob_present: decoded.present,
+      decoded_items: decoded.records.map((record) => record.summary),
       decode_error: decoded.error,
     };
   }));

@@ -51,9 +51,12 @@ export async function run() {
   // fixture blob decodes to RED_ROSE:3 ("Azure Bluet") — verified, not assumed.
   const entry = museum.data.items[0];
   assert.equal(entry.item_id, "ZOMBIE_SWORD", "museum key is preserved");
-  assert.equal(entry.item.skyblock_id, "RED_ROSE:3", "page items must be decoded");
-  assert.equal(entry.item.name, "Azure Bluet");
+  assert.ok(Array.isArray(entry.decoded_items), "decoded_items must be a list, not just the first record");
+  assert.equal(entry.decoded_items[0].skyblock_id, "RED_ROSE:3", "page items must be decoded");
+  assert.equal(entry.decoded_items[0].name, "Azure Bluet");
+  assert.equal(entry.blob_present, true, "a decodable blob must report presence");
   assert.equal(entry.decode_error, null);
+  assert.equal(entry.item, undefined, "the old singular item field must be gone");
   assert.equal(entry.data, undefined, "raw blob must not ship");
   assert.equal(entry.blob, undefined, "internal blob ref must not ship");
   assert.equal(museum.data.members[0].value, 1234);
