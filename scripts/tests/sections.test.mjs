@@ -355,21 +355,29 @@ export async function run() {
   assert.equal(wideBestiaryResponse.status, 200, JSON.stringify(wideBestiaryBody));
   assert.equal(wideBestiaryBody.data.payload_truncated, true, "an over-cap bestiary payload must be flagged truncated");
 
-  // The whole point of hoisting provenance out of every pet (instead of the
-  // 120-pet cap the previous pass used to dodge the 80,000-char response
-  // limit) is that 250 real pets -- PET_PAGE_CAP's pre-regression value --
-  // must fit again. This uses long, realistic identifiers throughout (a
-  // full-length pet UUID, a long real pet type name, the longest rarity
-  // string) rather than short placeholders, so the measurement means
-  // something: it is the actual worker response, through the same 80,000-char
-  // enforcement in src/http.js every other route goes through, not a
-  // hand-assembled approximation.
+  // A fixed pet-count cap cannot bound response bytes: size depends on what
+  // each pet carries, not how many pets there are. compactPets used to cap
+  // at a flat PET_PAGE_CAP (250), which only "worked" because its own test
+  // fixture was unrealistically lean (uuid/type/tier/exp/active only). Real
+  // pets commonly carry heldItem, and often skin and candyUsed too --
+  // compactPets picks all three (see PET_FIELDS) -- so a real collector's
+  // 250-pet profile 502'd against src/http.js's 80,000-char cap even though
+  // the lean fixture passed comfortably. This fixture is the realistic case
+  // that used to 502: 250 pets, each carrying heldItem, skin, and
+  // candyUsed, with long, realistic identifiers throughout (full-length pet
+  // UUIDs, a long real pet type name, the longest rarity string). It goes
+  // through the actual worker response pipeline, including the same
+  // 80,000-char enforcement in src/http.js every other route goes through,
+  // not a hand-assembled approximation.
   const widePets = Array.from({ length: 250 }, (_, i) => ({
     uuid: `${String(i).padStart(8, "0")}-1111-2222-3333-444444444444`,
     type: "PROTECTOR_DRAGON",
     exp: 4_600_000 + i,
     active: i === 0,
     tier: "LEGENDARY",
+    heldItem: "MINOS_RELIC",
+    skin: "PROTECTOR_DRAGON_ANIMATED",
+    candyUsed: 10,
   }));
   installMockFetch({
     "/v2/skyblock/profiles": () => Response.json({
@@ -392,11 +400,68 @@ export async function run() {
   assert.equal(widePetsResponse.status, 200, widePetsText);
   assert.ok(
     widePetsText.length < 80_000,
-    `a 250-pet response with long identifiers must stay under the 80,000-char cap (measured ${widePetsText.length})`
+    `a 250-pet response with heldItem+skin+candyUsed must stay under the 80,000-char cap (measured ${widePetsText.length})`
   );
   const widePetsBody = JSON.parse(widePetsText);
+  // total_pets always reports what Hypixel actually exposed, even when the
+  // byte budget means fewer than that are returned -- reporting the
+  // truncated count as the total would be exactly the "missing data
+  // reported as fact" failure this project forbids.
   assert.equal(widePetsBody.data.total_pets, 250);
-  assert.equal(widePetsBody.data.returned, 250, "restoring PET_PAGE_CAP to 250 must return all 250, not cap at 120");
-  assert.equal(widePetsBody.data.truncated, false, "250 pets at a 250 cap must not be reported truncated");
+  assert.ok(
+    widePetsBody.data.returned < 250,
+    `a realistic 250-pet profile must be truncated by the byte budget, not returned in full (measured ${widePetsBody.data.returned})`
+  );
+  assert.equal(widePetsBody.data.truncated, true, "a realistic 250-pet profile must be flagged truncated");
+  assert.equal(
+    widePetsBody.data.truncation_reason, "response_size_budget",
+    "truncation caused by the byte budget must say so, not just flip a boolean"
+  );
+  assert.equal(widePetsBody.data.pets.length, widePetsBody.data.returned);
+  // The active pet (index 0 of the fixture) must survive truncation: it is
+  // sorted to the front, so if truncation dropped it, the sort/truncation
+  // ordering is broken, not just the byte accounting.
+  assert.ok(
+    widePetsBody.data.pets.some((pet) => pet.active === true),
+    "an active pet must survive truncation, not be arbitrarily dropped"
+  );
   assertProvenanceResolves(widePetsBody.data.pets.map((pet) => pet.level), widePetsBody.data.level_provenance, "wide pets");
+
+  // A small, realistic fixture -- nowhere near the byte budget -- must not
+  // be truncated at all: truncated must mean data was actually dropped, not
+  // be a flag that fires regardless of size.
+  const smallPets = Array.from({ length: 3 }, (_, i) => ({
+    uuid: `${String(i).padStart(8, "0")}-1111-2222-3333-444444444444`,
+    type: "PROTECTOR_DRAGON",
+    exp: 4_600_000 + i,
+    active: i === 0,
+    tier: "LEGENDARY",
+    heldItem: "MINOS_RELIC",
+    skin: "PROTECTOR_DRAGON_ANIMATED",
+    candyUsed: 10,
+  }));
+  installMockFetch({
+    "/v2/skyblock/profiles": () => Response.json({
+      success: true,
+      profiles: [{
+        profile_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        cute_name: "Mango",
+        selected: true,
+        members: {
+          [playerUuid]: {
+            last_save: 100,
+            pets_data: { pets: smallPets },
+          },
+        },
+      }],
+    }),
+  });
+  const smallPetsResponse = await call(`/v1/player/section?uuid=${playerUuid}&section=pets`);
+  const smallPetsBody = await smallPetsResponse.json();
+  assert.equal(smallPetsResponse.status, 200, JSON.stringify(smallPetsBody));
+  assert.equal(smallPetsBody.data.total_pets, 3);
+  assert.equal(smallPetsBody.data.returned, 3, "a small fixture well under budget must return every pet");
+  assert.equal(smallPetsBody.data.returned, smallPetsBody.data.total_pets);
+  assert.equal(smallPetsBody.data.truncated, false, "a small fixture must not be flagged truncated");
+  assert.equal(smallPetsBody.data.truncation_reason, null, "an untruncated response must not carry a truncation reason");
 }

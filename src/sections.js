@@ -1018,16 +1018,31 @@ const PET_FIELDS = [
   "skin",
 ];
 
-// Each pet's derived level used to carry the full levelFromLadder provenance
-// (level_source, table_version, source_authority, source_url,
-// verify_on_wiki) inline. That provenance is identical for every pet sharing
-// a ladder, so it is now hoisted once per response into `level_provenance`
-// (see pointerLevel/buildLevelProvenance above) and each pet just points at
-// its ladder by key. That removes the per-pet duplication that used to force
-// a page size well below sanitize's normal 250-entry ceiling, so the cap
-// matches sanitize's ceiling again -- see the 250-pet size assertion in
-// scripts/tests/sections.test.mjs for the measured worst case.
+// Belt-and-braces hard ceiling on pet *count*, kept alongside the byte
+// budget below rather than removed: it bounds how much sorting/serializing
+// work one response can demand even in a pathological case where every pet
+// is tiny enough that the byte budget would never bind. In practice the
+// byte budget (PETS_ARRAY_BYTE_BUDGET) binds first for any realistic pet --
+// see the measured sizes in scripts/tests/sections.test.mjs -- because a
+// fixed count cannot bound bytes: response size depends on what each pet
+// carries (heldItem, skin, candyUsed), not how many pets there are. A 250
+// count cap alone let a lean fixture pass at 79,149 chars while a realistic
+// fixture (heldItem+skin+candyUsed) hit 101,899 -- a 502 in production.
 const PET_PAGE_CAP = 250;
+
+// Budget for the *serialized pets array only* (not the whole section
+// response). The rest of the response -- envelope
+// (success/uuid/profile/section/payload_kind/payload_version/data_present)
+// plus data's non-pets fields (available/total_pets/returned/truncated/
+// truncation_reason/level_provenance/reason) -- was measured directly
+// through the real worker response pipeline (src/http.js's own 80,000-char
+// enforcement), not estimated: ~736 chars with one pet ladder referenced,
+// rising to ~1,441 chars in the worst realistic case where a single
+// player's pets reference all seven pet ladders (common through mythic
+// plus golden_dragon) at once. 73,000 + that worst-case 1,441 leaves the
+// whole response at roughly 74,400 chars -- about 5,600 chars (7%) under
+// the 80,000 cap, not a budget that only just fits a measured case.
+const PETS_ARRAY_BYTE_BUDGET = 73_000;
 
 const PET_RARITY_ORDER = ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"];
 const PET_RARITY_LADDER_KEYS = {
@@ -1067,8 +1082,28 @@ function resolvePetLadderKey(pet) {
   return PET_RARITY_LADDER_KEYS[effectiveTier] || null;
 }
 
-function derivePetLevel(pet, usedLadders) {
-  return pointerLevel(pet?.exp, resolvePetLadderKey(pet), usedLadders);
+// Sort key for surviving truncation: active pets first (a player cares most
+// about the pet they're actually using), then by derived level -- using the
+// fractional level_with_progress so two pets on the same whole level still
+// order by how close they are to the next one -- descending, falling back
+// to raw exp when a level could not be derived (unknown rarity) so those
+// pets still sort sensibly among themselves rather than colliding at one
+// value.
+function petSortRank(entry) {
+  const active = entry.active === true ? 1 : 0;
+  const level = entry.level?.available
+    ? (entry.level.level_with_progress ?? entry.level.level ?? 0)
+    : -1;
+  const exp = optionalNumber(entry.exp) ?? -1;
+  return [active, level, exp];
+}
+
+function comparePetsForTruncation(left, right) {
+  const [leftActive, leftLevel, leftExp] = petSortRank(left);
+  const [rightActive, rightLevel, rightExp] = petSortRank(right);
+  if (leftActive !== rightActive) return rightActive - leftActive;
+  if (leftLevel !== rightLevel) return rightLevel - leftLevel;
+  return rightExp - leftExp;
 }
 
 function compactPets(member) {
@@ -1083,6 +1118,7 @@ function compactPets(member) {
       total_pets: null,
       returned: 0,
       truncated: false,
+      truncation_reason: null,
       pets: [],
       level_provenance: buildLevelProvenance(new Set()),
       reason: "Hypixel did not expose pet data for this player on this profile.",
@@ -1090,17 +1126,54 @@ function compactPets(member) {
   }
 
   const totalPets = rawPets.length;
-  const usedLadders = new Set();
-  const pets = rawPets.slice(0, PET_PAGE_CAP).map((pet) => ({
+
+  // Levels are derived once up front (into a scratch ladder set) purely to
+  // sort by them. Only ladders actually used by pets that survive
+  // truncation get folded into the real `usedLadders` below -- otherwise a
+  // dropped pet's ladder would leak into level_provenance.ladders as a
+  // dangling, unreferenced entry.
+  const scratchLadders = new Set();
+  const scored = rawPets.map((pet) => ({
     ...pick(pet, PET_FIELDS),
-    level: derivePetLevel(pet, usedLadders),
+    level: pointerLevel(pet?.exp, resolvePetLadderKey(pet), scratchLadders),
   }));
+  scored.sort(comparePetsForTruncation);
+
+  const usedLadders = new Set();
+  const pets = [];
+  let arrayBytesUsed = 2; // "[" + "]"
+  let sizeCapped = false;
+  let countCapped = false;
+
+  for (const entry of scored) {
+    if (pets.length >= PET_PAGE_CAP) {
+      countCapped = true;
+      break;
+    }
+    const entryLength = JSON.stringify(entry).length + (pets.length > 0 ? 1 : 0); // +1 for the joining comma
+    if (arrayBytesUsed + entryLength > PETS_ARRAY_BYTE_BUDGET) {
+      sizeCapped = true;
+      break;
+    }
+    arrayBytesUsed += entryLength;
+    pets.push(entry);
+    if (entry.level.available) usedLadders.add(entry.level.ladder);
+  }
+
+  const truncated = pets.length < totalPets;
 
   return {
     available: true,
     total_pets: totalPets,
     returned: pets.length,
-    truncated: totalPets > PET_PAGE_CAP,
+    truncated,
+    truncation_reason: !truncated
+      ? null
+      : sizeCapped
+        ? "response_size_budget"
+        : countCapped
+          ? "pet_count_cap"
+          : null,
     pets,
     level_provenance: buildLevelProvenance(usedLadders),
     reason: null,
