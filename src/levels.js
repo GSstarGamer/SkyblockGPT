@@ -42,7 +42,11 @@ export function levelFromLadder(experience, ladder, options) {
   let currentThreshold = 0;
   let nextThreshold = null;
 
+  // Stop at maxLevel. Walking a ladder longer than the cap would leave
+  // currentThreshold on a level past the one being reported, detaching
+  // xp_into_level and progress from the level they describe.
   for (const [index, threshold] of ladder.entries()) {
+    if (index + 1 > maxLevel) break;
     if (xp < threshold) {
       nextThreshold = threshold;
       break;

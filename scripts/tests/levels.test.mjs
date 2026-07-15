@@ -49,4 +49,17 @@ export async function run() {
   const empty = levelFromLadder(500, [], options);
   assert.equal(empty.level, null);
   assert.equal(empty.available, false);
+
+  // A ladder longer than maxLevel must not measure progress from a threshold
+  // past the reported level. Regression: xp_into_level was computed from the
+  // uncapped scan position, yielding 50 (650-600) for a level-2 result instead
+  // of 350 (650-300).
+  const longLadder = [100, 300, 600, 1000];
+  const capped = levelFromLadder(650, longLadder, { maxLevel: 2, tableVersion: "test-1" });
+  assert.equal(capped.level, 2, "level must not exceed maxLevel");
+  assert.equal(capped.xp_into_level, 350, "measured from level 2's own threshold, not level 3's");
+  assert.equal(capped.xp_for_next_level, null, "capped level has no next level");
+  assert.equal(capped.progress_to_next_level, 1);
+  assert.equal(capped.level_with_progress, 2, "must not exceed maxLevel");
+  assert.equal(capped.max_level, 2);
 }
