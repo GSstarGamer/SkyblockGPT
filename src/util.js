@@ -1,11 +1,3 @@
-async function mapInBatches(values, batchSize, mapper) {
-  const results = [];
-  for (let index = 0; index < values.length; index += batchSize) {
-    results.push(...await Promise.all(values.slice(index, index + batchSize).map(mapper)));
-  }
-  return results;
-}
-
 export function paginateRecords(records, page, limit) {
   const totalItems = records.length;
   const totalPages = totalItems ? Math.ceil(totalItems / limit) : 0;
