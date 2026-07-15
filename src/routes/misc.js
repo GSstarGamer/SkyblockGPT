@@ -25,10 +25,8 @@ export async function handleResources(url, env) {
   const page = readIntegerParameter(url, "page", 0, 0, 10_000);
   const requestedLimit = readIntegerParameter(url, "limit", 25, 1, 50);
   const limit = detail === "full" ? Math.min(requestedLimit, 10) : requestedLimit;
-  const cacheSeconds = kind === "election" ? 60 : kind === "bingo" ? 300 : 21_600;
   const payload = await fetchHypixelJson(`/v2/resources/skyblock/${kind}`, env, {}, {
     authenticated: false,
-    cacheSeconds,
   });
 
   if (kind === "election" || kind === "bingo") {
@@ -76,7 +74,6 @@ export async function handleFeed(url, env) {
   const endpoint = kind === "news" ? "/v2/skyblock/news" : "/v2/skyblock/firesales";
   const payload = await fetchHypixelJson(endpoint, env, {}, {
     authenticated: false,
-    cacheSeconds: kind === "news" ? 300 : 60,
   });
 
   return json({

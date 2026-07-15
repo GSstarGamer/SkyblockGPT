@@ -2,11 +2,43 @@ import { UpstreamError } from "./http.js";
 
 const UPSTREAM_USER_AGENT = "SkyblockGPT/2.5.1 (contact: Discord gs._)";
 const memoryCache = new Map();
+let cachedSkillResource = null;
+let cachedSkillResourceExpiresAt = 0;
+
+// Cache TTL in seconds, keyed by upstream path. Caching is opt-in: anything
+// absent gets 0. Player data is never cached (AGENTS.md, /privacy) and market
+// data changes too fast to be worth staleness.
+const CACHE_POLICY = new Map([
+  ["/v2/skyblock/profiles", 0],
+  ["/v2/skyblock/museum", 0],
+  ["/v2/skyblock/garden", 0],
+  ["/v2/skyblock/bingo", 0],
+  ["/v2/skyblock/bazaar", 0],
+  ["/v2/skyblock/auctions", 0],
+  ["/v2/skyblock/auction", 0],
+  ["/v2/skyblock/auctions_ended", 0],
+  ["/v2/skyblock/firesales", 60],
+  ["/v2/resources/skyblock/election", 60],
+  ["/v2/skyblock/news", 300],
+  ["/v2/resources/skyblock/bingo", 300],
+  ["/v2/resources/skyblock/items", 21_600],
+  ["/v2/resources/skyblock/skills", 21_600],
+  ["/v2/resources/skyblock/collections", 21_600],
+]);
+
+function cacheSecondsFor(path) {
+  return CACHE_POLICY.get(path) ?? 0;
+}
+
+export function resetCaches() {
+  memoryCache.clear();
+  cachedSkillResource = null;
+  cachedSkillResourceExpiresAt = 0;
+}
 
 export async function fetchProfiles(uuid, env) {
   const payload = await fetchHypixelJson("/v2/skyblock/profiles", env, { uuid }, {
     authenticated: true,
-    cacheSeconds: 0,
     timeoutMs: 12_000,
   });
   return Array.isArray(payload.profiles) ? payload.profiles : [];
@@ -22,25 +54,13 @@ export async function fetchHypixelJson(path, env, parameters = {}, options = {})
   return fetchJsonUpstream(endpoint, {
     headers,
     cacheKey: `hypixel:${endpoint.toString()}`,
-    cacheSeconds: options.cacheSeconds || 0,
+    cacheSeconds: cacheSecondsFor(path),
     timeoutMs: options.timeoutMs || 12_000,
     provider: "Hypixel",
   });
 }
 
 async function fetchJsonUpstream(endpoint, options) {
-  const persistentCache = options.persistentCache && typeof caches !== "undefined" && caches.default;
-  const persistentRequest = persistentCache ? new Request(endpoint.toString(), { method: "GET" }) : null;
-  if (persistentCache) {
-    const cachedResponse = await caches.default.match(persistentRequest);
-    if (cachedResponse) {
-      try {
-        return await cachedResponse.json();
-      } catch {
-        await caches.default.delete(persistentRequest);
-      }
-    }
-  }
   const cached = getMemoryCache(options.cacheKey);
   if (cached !== null) return cached;
   const controller = new AbortController();
@@ -70,14 +90,6 @@ async function fetchJsonUpstream(endpoint, options) {
   }
   if (options.cacheSeconds > 0) {
     setMemoryCache(options.cacheKey, payload, options.cacheSeconds);
-    if (persistentCache) {
-      await caches.default.put(persistentRequest, new Response(JSON.stringify(payload), {
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": `public, max-age=${options.cacheSeconds}`,
-        },
-      }));
-    }
   }
   return payload;
 }
@@ -105,7 +117,6 @@ function setMemoryCache(key, value, seconds) {
 export async function fetchSkyBlockItemNameMap(env) {
   const payload = await fetchHypixelJson("/v2/resources/skyblock/items", env, {}, {
     authenticated: false,
-    cacheSeconds: 21_600,
   });
   return new Map((Array.isArray(payload.items) ? payload.items : []).map((item) => [item.id, item.name]));
 }
@@ -114,7 +125,6 @@ export async function fetchCollectionResource(env) {
   try {
     const payload = await fetchHypixelJson("/v2/resources/skyblock/collections", env, {}, {
       authenticated: false,
-      cacheSeconds: 21_600,
       timeoutMs: 8_000,
     });
     return payload && payload.success !== false && payload.collections ? payload : null;
@@ -122,9 +132,6 @@ export async function fetchCollectionResource(env) {
     return null;
   }
 }
-
-let cachedSkillResource = null;
-let cachedSkillResourceExpiresAt = 0;
 
 export async function fetchSkillResource(env) {
   if (cachedSkillResource && Date.now() < cachedSkillResourceExpiresAt) {
@@ -134,7 +141,6 @@ export async function fetchSkillResource(env) {
   try {
     const payload = await fetchHypixelJson("/v2/resources/skyblock/skills", env, {}, {
       authenticated: false,
-      cacheSeconds: 21_600,
       timeoutMs: 8_000,
     });
     if (!payload || payload.success === false || !payload.skills) return null;

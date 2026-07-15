@@ -1,11 +1,3 @@
-async function mapInBatches(values, batchSize, mapper) {
-  const results = [];
-  for (let index = 0; index < values.length; index += batchSize) {
-    results.push(...await Promise.all(values.slice(index, index + batchSize).map(mapper)));
-  }
-  return results;
-}
-
 export function paginateRecords(records, page, limit) {
   const totalItems = records.length;
   const totalPages = totalItems ? Math.ceil(totalItems / limit) : 0;
@@ -65,19 +57,40 @@ export function pick(object, keys) {
   return sanitize(result, 5, 300);
 }
 
-export function sanitize(value, depth = 5, maxEntries = 300) {
+export function createTruncationReport() {
+  return { truncated: false, reasons: [] };
+}
+
+function noteTruncation(report, reason) {
+  if (!report) return;
+  report.truncated = true;
+  if (!report.reasons.includes(reason)) report.reasons.push(reason);
+}
+
+export function sanitize(value, depth = 5, maxEntries = 300, report = null) {
   if (value === null || value === undefined) return value ?? null;
-  if (depth <= 0) return "[omitted]";
+  if (depth <= 0) {
+    noteTruncation(report, "depth");
+    return "[omitted]";
+  }
   if (["string", "number", "boolean"].includes(typeof value)) {
-    return typeof value === "string" && value.length > 2_000 ? `${value.slice(0, 2_000)}…` : value;
+    if (typeof value === "string" && value.length > 2_000) {
+      noteTruncation(report, "string");
+      return `${value.slice(0, 2_000)}…`;
+    }
+    return value;
   }
   if (Array.isArray(value)) {
-    return value.slice(0, Math.min(maxEntries, 250)).map((item) => sanitize(item, depth - 1, maxEntries));
+    const cap = Math.min(maxEntries, 250);
+    if (value.length > cap) noteTruncation(report, "array");
+    return value.slice(0, cap).map((item) => sanitize(item, depth - 1, maxEntries, report));
   }
   if (typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length > maxEntries) noteTruncation(report, "object");
     const result = {};
-    for (const [key, item] of Object.entries(value).slice(0, maxEntries)) {
-      result[key] = sanitize(item, depth - 1, maxEntries);
+    for (const [key, item] of entries.slice(0, maxEntries)) {
+      result[key] = sanitize(item, depth - 1, maxEntries, report);
     }
     return result;
   }

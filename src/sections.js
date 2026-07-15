@@ -1,4 +1,5 @@
 import {
+  createTruncationReport,
   firstNumber,
   isoFromUnixMs,
   normalizeUnixMilliseconds,
@@ -15,8 +16,10 @@ import {
   cleanItemName,
   compactAccessories,
   compactGear,
+  decodeInventoryBlob,
   formatItemId,
 } from "./items.js";
+import { LADDER_SOURCES, TABLE_VERSION, levelFromLadder } from "./levels.js";
 
 export const PROFILE_SECTIONS = new Set([
   "overview",
@@ -37,7 +40,8 @@ export const PROFILE_SECTIONS = new Set([
 
 export function compactGarden(garden) {
   const value = objectOrEmpty(garden);
-  return sanitize({
+  const report = createTruncationReport();
+  const sanitized = sanitize({
     uuid: value.uuid || null,
     garden_experience: value.garden_experience,
     commission_data: value.commission_data,
@@ -52,10 +56,15 @@ export function compactGarden(garden) {
       "uuid", "garden_experience", "commission_data", "composter_data", "active_commissions", "resources_collected",
       "crop_upgrade_levels", "unlocked_plots_ids", "unlocked_barn_skins", "selected_barn_skin",
     ]).has(key))),
-  }, 10, 2_000);
+  }, 10, 2_000, report);
+  // The flag is attached after sanitize runs so it is not itself subject to
+  // the depth/entry limits it describes.
+  return { ...sanitized, garden_truncated: report.truncated };
 }
 
-export function compactMuseum(profileData, query, page, limit) {
+const MUSEUM_ITEMS_PER_ENTRY = 8;
+
+export async function compactMuseum(profileData, query, page, limit) {
   const members = [];
   const entries = [];
   for (const [memberUuid, rawMuseum] of Object.entries(objectOrEmpty(profileData))) {
@@ -66,30 +75,19 @@ export function compactMuseum(profileData, query, page, limit) {
         member_uuid: normalizeUuid(memberUuid),
         source: "items",
         item_id: itemId,
-        data: sanitize(itemData, 7, 400),
+        donated_time: optionalNumber(itemData?.donated_time),
+        blob: itemData?.items ?? null,
       });
     }
     for (const [index, special] of (Array.isArray(museum.special) ? museum.special : []).entries()) {
-      const specialItems = objectOrEmpty(special?.items);
-      if (Object.keys(specialItems).length) {
-        for (const [itemId, itemData] of Object.entries(specialItems)) {
-          memberEntries.push({
-            member_uuid: normalizeUuid(memberUuid),
-            source: "special",
-            special_index: index,
-            donated_time: optionalNumber(special?.donated_time),
-            item_id: itemId,
-            data: sanitize(itemData, 7, 400),
-          });
-        }
-      } else {
-        memberEntries.push({
-          member_uuid: normalizeUuid(memberUuid),
-          source: "special",
-          special_index: index,
-          data: sanitize(special, 7, 400),
-        });
-      }
+      memberEntries.push({
+        member_uuid: normalizeUuid(memberUuid),
+        source: "special",
+        special_index: index,
+        item_id: null,
+        donated_time: optionalNumber(special?.donated_time),
+        blob: special?.items ?? null,
+      });
     }
     members.push({
       member_uuid: normalizeUuid(memberUuid),
@@ -100,11 +98,38 @@ export function compactMuseum(profileData, query, page, limit) {
     entries.push(...memberEntries);
   }
 
-  const filtered = entries.filter((entry) => !query || JSON.stringify(entry).toLowerCase().includes(query));
+  // Query matches identifiers only. It previously ran over JSON.stringify of the
+  // entry, which meant it searched truncated base64 — never a useful match.
+  const filtered = entries.filter((entry) => !query ||
+    `${entry.item_id || ""} ${entry.source} ${entry.member_uuid}`.toLowerCase().includes(query));
+  const pagination = paginateRecords(filtered, page, limit);
+
+  // Decode only this page. Museums hold hundreds of items; decoding all of them
+  // would be base64 + gzip + a full NBT walk each. A single entry can hold more
+  // than one item — a donated armor set carries every piece in one blob — so
+  // report the whole list rather than just the first. Cap and flag per entry,
+  // mirroring compactNbtItem's attributes/enchantments caps in items.js, so a
+  // uniform page of multi-piece sets can't push a response over the size cap.
+  const items = await Promise.all(pagination.items.map(async ({ blob, ...entry }) => {
+    if (!blob) {
+      return { ...entry, blob_present: false, decoded_items: [], decoded_items_truncated: false, decode_error: null };
+    }
+    const decoded = await decodeInventoryBlob(blob);
+    const summaries = decoded.records.map((record) => record.summary);
+    return {
+      ...entry,
+      blob_present: decoded.present,
+      decoded_items: summaries.slice(0, MUSEUM_ITEMS_PER_ENTRY),
+      decoded_items_truncated: summaries.length > MUSEUM_ITEMS_PER_ENTRY,
+      decode_error: decoded.error,
+    };
+  }));
+
   return {
     members,
     query: query || null,
-    ...paginateRecords(filtered, page, limit),
+    ...pagination,
+    items,
   };
 }
 
@@ -315,10 +340,14 @@ export async function buildSection(section, profile, member, skillResource = nul
       return compactPets(member);
     case "accessories":
       return await compactAccessories(member);
-    case "bestiary":
-      return sanitize(member.bestiary || {}, 5, 700);
-    case "rift":
-      return sanitize(member.rift || {}, 6, 500);
+    case "bestiary": {
+      const report = createTruncationReport();
+      return { ...sanitize(member.bestiary || {}, 5, 700, report), payload_truncated: report.truncated };
+    }
+    case "rift": {
+      const report = createTruncationReport();
+      return { ...sanitize(member.rift || {}, 6, 500, report), payload_truncated: report.truncated };
+    }
     default:
       return {};
   }
@@ -785,6 +814,7 @@ function compactPowder(core, type) {
 function compactStats(member, skillResource = null) {
   const lifetime = objectOrEmpty(member?.player_stats);
   const skills = compactSkills(member, skillResource);
+  const lifetimeCountersReport = createTruncationReport();
 
   return {
     skills,
@@ -808,7 +838,8 @@ function compactStats(member, skillResource = null) {
       skill: skills.skills.fishing || null,
       lifetime_counters: filterNumericStats(lifetime, /fish|sea_creature|trophy/i),
     },
-    lifetime_counters: sanitize(lifetime, 6, 900),
+    lifetime_counters: sanitize(lifetime, 6, 900, lifetimeCountersReport),
+    lifetime_counters_truncated: lifetimeCountersReport.truncated,
     current_effective_stats: {
       available: false,
       reason: "Hypixel does not return one authoritative snapshot of current Health, Strength, Defense, Mining Speed, Mining Fortune, and similar gear/buff totals. Those must be derived from exposed gear, pets, perks, accessories, skills, and location-specific effects.",
@@ -821,12 +852,19 @@ function compactStats(member, skillResource = null) {
 
 function filterNumericStats(stats, pattern, limit = 160) {
   const result = {};
-  for (const [key, value] of Object.entries(stats)) {
-    if (!pattern.test(key)) continue;
-    if (!["number", "boolean", "string"].includes(typeof value)) continue;
-    result[key] = value;
-    if (Object.keys(result).length >= limit) break;
-  }
+  const walk = (value, prefix, depth) => {
+    if (depth > 4) return;
+    for (const [key, item] of Object.entries(value)) {
+      if (Object.keys(result).length >= limit) return;
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        walk(item, path, depth + 1);
+      } else if (["number", "boolean", "string"].includes(typeof item) && pattern.test(path)) {
+        result[path] = item;
+      }
+    }
+  };
+  walk(objectOrEmpty(stats), "", 0);
   return result;
 }
 
@@ -836,23 +874,107 @@ function readTreeScopedValue(skillTree, key, scope) {
   return value;
 }
 
+// Hypixel's slayer_bosses keys are already the lowercase boss names used as
+// the LADDER_SOURCES suffix (zombie, spider, wolf, enderman, blaze, vampire).
+// A direct `slayer_${name}` lookup means an unrecognized boss key naturally
+// falls through to "no source" -- never a fallback to another boss's ladder.
+// Returns the LADDER_SOURCES *key*, not the entry itself: callers need the
+// key both to resolve the ladder (deriveLevel) and to point back to it from
+// level_provenance.ladders (pointerLevel), so the key is the one shared
+// currency between the two.
+function slayerLadderKey(bossName) {
+  const key = `slayer_${String(bossName || "").toLowerCase()}`;
+  return LADDER_SOURCES[key] ? key : null;
+}
+
+// levelFromLadder itself reports `available: false` with `source_authority:
+// null` when handed a missing/invalid ladder, so routing the "no source"
+// case through it (rather than hand-building an unavailable object) keeps
+// exactly one place that defines what "level unavailable" looks like.
+function deriveLevel(experience, ladderKey) {
+  const source = ladderKey ? LADDER_SOURCES[ladderKey] : null;
+  return source
+    ? levelFromLadder(experience, source.ladder, { ...source, tableVersion: TABLE_VERSION })
+    : levelFromLadder(experience, null, { tableVersion: TABLE_VERSION });
+}
+
+// Provenance (level_source, table_version, source_authority, source_url,
+// verify_on_wiki) is identical for every item sharing a ladder, so it is
+// hoisted out of the per-item level object and emitted once per section,
+// keyed by ladder. Each item instead carries a `ladder` pointer into
+// level_provenance.ladders. Strips `experience` too: every caller here
+// already keeps the item's original XP field, so restating it inside
+// `level` would just be a second duplicate.
+//
+// `usedLadders` is populated as a side effect (only for ladders that
+// actually produced an available level) so buildLevelProvenance can emit
+// exactly the ladders referenced -- no dangling pointers, no unused entries.
+function pointerLevel(experience, ladderKey, usedLadders) {
+  const result = deriveLevel(experience, ladderKey);
+  if (!result.available) {
+    return {
+      available: false,
+      level: null,
+      level_with_progress: null,
+      max_level: null,
+      xp_into_level: null,
+      xp_for_next_level: null,
+      progress_to_next_level: null,
+    };
+  }
+  usedLadders.add(ladderKey);
+  return {
+    available: true,
+    level: result.level,
+    level_with_progress: result.level_with_progress,
+    max_level: result.max_level,
+    xp_into_level: result.xp_into_level,
+    xp_for_next_level: result.xp_for_next_level,
+    progress_to_next_level: result.progress_to_next_level,
+    ladder: ladderKey,
+  };
+}
+
+// level_source, table_version and verify_on_wiki are identical across every
+// current ladder, so they sit at the top level. source_authority and
+// source_url vary per ladder (dungeon_class is corroborated_secondary, every
+// other ladder is wiki) so they stay inside ladders[key] -- flattening them
+// upward would relabel a secondary-wiki table as authoritative.
+function buildLevelProvenance(usedLadders) {
+  const ladders = {};
+  for (const key of usedLadders) {
+    const source = LADDER_SOURCES[key];
+    if (!source) continue;
+    ladders[key] = { source_authority: source.authority, source_url: source.sourceUrl };
+  }
+  return {
+    level_source: "static_table",
+    table_version: TABLE_VERSION,
+    verify_on_wiki: true,
+    ladders,
+  };
+}
+
 function compactSlayers(member) {
   const bosses = member?.slayer?.slayer_bosses || member?.slayer_bosses || {};
   const result = {};
+  const usedLadders = new Set();
 
   for (const [name, data] of Object.entries(bosses).slice(0, 30)) {
-    result[name] = sanitize(data, 4, 100);
+    const sanitized = objectOrEmpty(sanitize(data, 4, 100));
+    result[name] = { ...sanitized, level: pointerLevel(data?.xp, slayerLadderKey(name), usedLadders) };
   }
-  return result;
+  return { ...result, level_provenance: buildLevelProvenance(usedLadders) };
 }
 
 function compactDungeons(member) {
   const raw = member?.dungeons || {};
   const dungeonTypes = {};
   const classes = {};
+  const usedLadders = new Set();
 
   for (const [name, data] of Object.entries(raw.dungeon_types || {}).slice(0, 20)) {
-    dungeonTypes[name] = pick(data, [
+    const picked = pick(data, [
       "experience",
       "highest_tier_completed",
       "times_played",
@@ -863,34 +985,198 @@ function compactDungeons(member) {
       "fastest_time_s_plus",
       "best_score",
     ]);
+    // Only Catacombs has a sourced ladder; other dungeon types (if Hypixel
+    // ever adds one) report level unavailable rather than reusing this one.
+    const ladderKey = name === "catacombs" ? "catacombs" : null;
+    dungeonTypes[name] = { ...picked, level: pointerLevel(data?.experience, ladderKey, usedLadders) };
   }
 
   for (const [name, data] of Object.entries(raw.player_classes || {}).slice(0, 20)) {
-    classes[name] = pick(data, ["experience"]);
+    const picked = pick(data, ["experience"]);
+    // All dungeon classes share one XP curve (LADDER_SOURCES.dungeon_class).
+    classes[name] = { ...picked, level: pointerLevel(data?.experience, "dungeon_class", usedLadders) };
   }
 
   return {
     selected_dungeon_class: raw.selected_dungeon_class || null,
     dungeon_types: sanitize(dungeonTypes, 5, 300),
     player_classes: sanitize(classes, 4, 100),
+    level_provenance: buildLevelProvenance(usedLadders),
   };
 }
 
-function compactPets(member) {
-  const pets = member?.pets_data?.pets || member?.pets || [];
-  if (!Array.isArray(pets)) return [];
+const PET_FIELDS = [
+  "uuid",
+  "type",
+  "exp",
+  "active",
+  "tier",
+  "heldItem",
+  "held_item",
+  "candyUsed",
+  "candy_used",
+  "skin",
+];
 
-  return pets.slice(0, 250).map((pet) => pick(pet, [
-    "uuid",
-    "type",
-    "exp",
-    "active",
-    "tier",
-    "heldItem",
-    "held_item",
-    "candyUsed",
-    "candy_used",
-    "skin",
-  ]));
+// Belt-and-braces hard ceiling on pet *count*, kept alongside the byte
+// budget below rather than removed: it bounds how much sorting/serializing
+// work one response can demand even in a pathological case where every pet
+// is tiny enough that the byte budget would never bind. In practice the
+// byte budget (PETS_ARRAY_BYTE_BUDGET) binds first for any realistic pet --
+// see the measured sizes in scripts/tests/sections.test.mjs -- because a
+// fixed count cannot bound bytes: response size depends on what each pet
+// carries (heldItem, skin, candyUsed), not how many pets there are. A 250
+// count cap alone let a lean fixture pass at 79,149 chars while a realistic
+// fixture (heldItem+skin+candyUsed) hit 101,899 -- a 502 in production.
+const PET_PAGE_CAP = 250;
+
+// Budget for the *serialized pets array only* (not the whole section
+// response). The rest of the response -- envelope
+// (success/uuid/profile/section/payload_kind/payload_version/data_present)
+// plus data's non-pets fields (available/total_pets/returned/truncated/
+// truncation_reason/level_provenance/reason) -- was measured directly
+// through the real worker response pipeline (src/http.js's own 80,000-char
+// enforcement), not estimated: ~736 chars with one pet ladder referenced,
+// rising to ~1,441 chars in the worst realistic case where a single
+// player's pets reference all seven pet ladders (common through mythic
+// plus golden_dragon) at once. 73,000 + that worst-case 1,441 leaves the
+// whole response at roughly 74,400 chars -- about 5,600 chars (7%) under
+// the 80,000 cap, not a budget that only just fits a measured case.
+const PETS_ARRAY_BYTE_BUDGET = 73_000;
+
+const PET_RARITY_ORDER = ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"];
+const PET_RARITY_LADDER_KEYS = {
+  COMMON: "pet_common",
+  UNCOMMON: "pet_uncommon",
+  RARE: "pet_rare",
+  EPIC: "pet_epic",
+  LEGENDARY: "pet_legendary",
+  MYTHIC: "pet_mythic",
+};
+
+// PET_ITEM_TIER_BOOST raises a pet's effective rarity by one step for
+// leveling purposes. A boosted Mythic pet has no rarity above it to boost
+// into, so this returns null and the caller reports the level unavailable
+// instead of guessing.
+function boostedPetRarity(tier) {
+  const index = PET_RARITY_ORDER.indexOf(tier);
+  if (index === -1 || index === PET_RARITY_ORDER.length - 1) return null;
+  return PET_RARITY_ORDER[index + 1];
+}
+
+// Golden Dragon has its own ladder (levels 1-200) rather than the shared
+// Legendary curve, so its type is checked before falling back to tier.
+// Returns the LADDER_SOURCES key (not the entry) -- see slayerLadderKey for
+// why: the key is what both deriveLevel and the level_provenance pointer need.
+function resolvePetLadderKey(pet) {
+  const type = typeof pet?.type === "string" ? pet.type.toUpperCase() : null;
+  if (type === "GOLDEN_DRAGON") return "golden_dragon";
+
+  const tier = typeof pet?.tier === "string" ? pet.tier.toUpperCase() : null;
+  if (!tier) return null;
+
+  const heldItem = pet?.heldItem ?? pet?.held_item ?? null;
+  const effectiveTier = heldItem === "PET_ITEM_TIER_BOOST" ? boostedPetRarity(tier) : tier;
+  if (!effectiveTier) return null;
+
+  return PET_RARITY_LADDER_KEYS[effectiveTier] || null;
+}
+
+// Sort key for surviving truncation: active pets first (a player cares most
+// about the pet they're actually using), then by derived level -- using the
+// fractional level_with_progress so two pets on the same whole level still
+// order by how close they are to the next one -- descending, falling back
+// to raw exp when a level could not be derived (unknown rarity) so those
+// pets still sort sensibly among themselves rather than colliding at one
+// value.
+function petSortRank(entry) {
+  const active = entry.active === true ? 1 : 0;
+  const level = entry.level?.available
+    ? (entry.level.level_with_progress ?? entry.level.level ?? 0)
+    : -1;
+  const exp = optionalNumber(entry.exp) ?? -1;
+  return [active, level, exp];
+}
+
+function comparePetsForTruncation(left, right) {
+  const [leftActive, leftLevel, leftExp] = petSortRank(left);
+  const [rightActive, rightLevel, rightExp] = petSortRank(right);
+  if (leftActive !== rightActive) return rightActive - leftActive;
+  if (leftLevel !== rightLevel) return rightLevel - leftLevel;
+  return rightExp - leftExp;
+}
+
+function compactPets(member) {
+  const rawPets = member?.pets_data?.pets ?? member?.pets;
+
+  // Distinguish "Hypixel exposed no pet data" (missing/non-array field) from
+  // "Hypixel exposed pet data and the player genuinely has zero pets" (an
+  // actual empty array). Only the former is unavailable.
+  if (!Array.isArray(rawPets)) {
+    return {
+      available: false,
+      total_pets: null,
+      returned: 0,
+      truncated: false,
+      truncation_reason: null,
+      pets: [],
+      level_provenance: buildLevelProvenance(new Set()),
+      reason: "Hypixel did not expose pet data for this player on this profile.",
+    };
+  }
+
+  const totalPets = rawPets.length;
+
+  // Levels are derived once up front (into a scratch ladder set) purely to
+  // sort by them. Only ladders actually used by pets that survive
+  // truncation get folded into the real `usedLadders` below -- otherwise a
+  // dropped pet's ladder would leak into level_provenance.ladders as a
+  // dangling, unreferenced entry.
+  const scratchLadders = new Set();
+  const scored = rawPets.map((pet) => ({
+    ...pick(pet, PET_FIELDS),
+    level: pointerLevel(pet?.exp, resolvePetLadderKey(pet), scratchLadders),
+  }));
+  scored.sort(comparePetsForTruncation);
+
+  const usedLadders = new Set();
+  const pets = [];
+  let arrayBytesUsed = 2; // "[" + "]"
+  let sizeCapped = false;
+  let countCapped = false;
+
+  for (const entry of scored) {
+    if (pets.length >= PET_PAGE_CAP) {
+      countCapped = true;
+      break;
+    }
+    const entryLength = JSON.stringify(entry).length + (pets.length > 0 ? 1 : 0); // +1 for the joining comma
+    if (arrayBytesUsed + entryLength > PETS_ARRAY_BYTE_BUDGET) {
+      sizeCapped = true;
+      break;
+    }
+    arrayBytesUsed += entryLength;
+    pets.push(entry);
+    if (entry.level.available) usedLadders.add(entry.level.ladder);
+  }
+
+  const truncated = pets.length < totalPets;
+
+  return {
+    available: true,
+    total_pets: totalPets,
+    returned: pets.length,
+    truncated,
+    truncation_reason: !truncated
+      ? null
+      : sizeCapped
+        ? "response_size_budget"
+        : countCapped
+          ? "pet_count_cap"
+          : null,
+    pets,
+    level_provenance: buildLevelProvenance(usedLadders),
+    reason: null,
+  };
 }
 

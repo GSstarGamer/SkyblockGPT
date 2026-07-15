@@ -79,7 +79,9 @@ export function findNbtContainers(member) {
     if (value && typeof value === "object") scan(value, key, 0);
   }
 
-  return [...found.values()].sort((left, right) => left.id.localeCompare(right.id));
+  return [...found.values()]
+    .filter((entry) => entry.kind !== "backpack_icon")
+    .sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export function findSacksCounts(member) {
@@ -119,6 +121,7 @@ function inventoryContainerKind(path) {
   if (/equipment/.test(value)) return "equipment";
   if (/wardrobe/.test(value)) return "wardrobe";
   if (/ender_chest/.test(value)) return "ender_chest";
+  if (/backpack_icons?/.test(value)) return "backpack_icon";
   if (/backpack/.test(value)) return "backpack";
   if (/personal_vault|vault/.test(value)) return "personal_vault";
   if (/fishing_bag/.test(value)) return "fishing_bag";
@@ -139,6 +142,7 @@ function inventoryContainerLabel(path) {
     equipment: "Equipment",
     wardrobe: "Wardrobe",
     ender_chest: "Ender Chest",
+    backpack_icon: "Backpack Icon",
     backpack: "Backpack",
     personal_vault: "Personal Vault",
     fishing_bag: "Fishing Bag",
@@ -244,6 +248,13 @@ function compactNbtItem(item, fallbackSlot) {
 
   if (!skyblockId && !name && (!vanillaId || vanillaId === 0)) return null;
 
+  const attributeKeys = extra.attributes && typeof extra.attributes === "object"
+    ? Object.keys(extra.attributes)
+    : [];
+  const enchantmentKeys = extra.enchantments && typeof extra.enchantments === "object"
+    ? Object.keys(extra.enchantments)
+    : [];
+
   return {
     slot,
     name: name || "Unknown item",
@@ -252,12 +263,10 @@ function compactNbtItem(item, fallbackSlot) {
     reforge: stringOrNull(extra.modifier),
     stars: optionalNumber(extra.upgrade_level ?? extra.dungeon_item_level),
     recombobulated: number(extra.rarity_upgrades) > 0,
-    attributes: extra.attributes && typeof extra.attributes === "object"
-      ? Object.keys(extra.attributes).slice(0, 20)
-      : [],
-    enchantments: extra.enchantments && typeof extra.enchantments === "object"
-      ? Object.keys(extra.enchantments).slice(0, 50)
-      : [],
+    attributes: attributeKeys.slice(0, 20),
+    attributes_truncated: attributeKeys.length > 20,
+    enchantments: enchantmentKeys.slice(0, 50),
+    enchantments_truncated: enchantmentKeys.length > 50,
   };
 }
 
