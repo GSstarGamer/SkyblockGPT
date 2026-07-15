@@ -260,7 +260,11 @@ export async function handleLowestBin(url, env) {
     matches.push({ auction, item });
   }
   // Candidates were sorted ascending and walked in order, so matches already are.
-  const decodeBudgetExhausted = decodesPerformed >= decodeBudget && matches.length < limit;
+  // The budget only ran out if there were candidates we never got to — landing
+  // exactly on decodeBudget after draining every candidate is not exhaustion.
+  const decodeBudgetExhausted = decodesPerformed >= decodeBudget
+    && decodesPerformed < candidates.length
+    && matches.length < limit;
 
   const cheapestMatches = await Promise.all(matches.slice(0, limit).map(async ({ auction, item }) => ({
     ...await compactAuction(auction, false),
