@@ -1,6 +1,33 @@
 import assert from "node:assert/strict";
 import { call, installMockFetch, playerUuid } from "./_fixtures.mjs";
 
+// A derived level's provenance must always be resolvable. Since 26de7b9
+// hoisted provenance out of each item, that guarantee now runs through a
+// `level` object's `ladder` pointer into the section's `level_provenance.
+// ladders`, rather than through fields on the level object itself. This
+// checks both directions: every pointer resolves to a real entry, and every
+// entry is referenced by at least one item -- a dangling pointer or an
+// unused entry both defeat the point of hoisting provenance in the first
+// place.
+function assertProvenanceResolves(levels, provenance, label) {
+  const referenced = new Set();
+  for (const level of levels) {
+    if (!level.available) {
+      assert.equal(level.ladder, undefined, `${label}: an unavailable level must not carry a ladder pointer`);
+      continue;
+    }
+    assert.ok(level.ladder, `${label}: an available level must carry a ladder pointer`);
+    assert.ok(
+      provenance.ladders[level.ladder],
+      `${label}: ladder "${level.ladder}" must resolve in level_provenance.ladders`
+    );
+    referenced.add(level.ladder);
+  }
+  for (const key of Object.keys(provenance.ladders)) {
+    assert.ok(referenced.has(key), `${label}: level_provenance.ladders has unused entry "${key}"`);
+  }
+}
+
 export async function run() {
   // player_stats is nested. The old filter tested the key `kills` against
   // /kill/, then dropped it because its value is an object.
@@ -161,14 +188,24 @@ export async function run() {
   assert.equal(petsBody.data.pets.length, 2);
   assert.equal(petsBody.data.pets[0].exp, 4_600_000, "exp must survive alongside the new level field");
 
+  // Provenance now lives once per response, in level_provenance, with each
+  // pet pointing at the ladder it used.
+  const petProvenance = petsBody.data.level_provenance;
+  assert.equal(petProvenance.level_source, "static_table");
+  assert.ok(petProvenance.table_version);
+  assert.equal(petProvenance.verify_on_wiki, true);
+  assertProvenanceResolves(petsBody.data.pets.map((pet) => pet.level), petProvenance, "pets");
+
   const knownPetLevel = petsBody.data.pets[0].level;
   assert.equal(knownPetLevel.available, true, "a pet with a known rarity must derive a level");
-  assert.notEqual(knownPetLevel.source_authority, null, "a known-rarity pet's level must carry its source authority");
-  assert.ok(knownPetLevel.source_url, "a known-rarity pet's level must carry a source URL");
+  assert.ok(knownPetLevel.ladder, "a known-rarity pet's level must carry a ladder pointer");
+  const knownPetLadder = petProvenance.ladders[knownPetLevel.ladder];
+  assert.notEqual(knownPetLadder.source_authority, null, "a known-rarity pet's ladder must carry its source authority");
+  assert.ok(knownPetLadder.source_url, "a known-rarity pet's ladder must carry a source URL");
 
   const unknownPetLevel = petsBody.data.pets[1].level;
   assert.equal(unknownPetLevel.available, false, "a pet with no rarity must report its level unavailable, not guess a ladder");
-  assert.equal(unknownPetLevel.source_authority, null);
+  assert.equal(unknownPetLevel.ladder, undefined, "an unavailable pet level must not carry a ladder pointer");
 
   // Missing pet data entirely (no pets_data.pets, no pets) must read as
   // unavailable, not as an empty list presented as though the player has
@@ -190,6 +227,10 @@ export async function run() {
   assert.equal(noPetsBody.data.available, false);
   assert.ok(noPetsBody.data.reason, "missing pet data must explain why, not just report available:false");
   assert.deepEqual(noPetsBody.data.pets, [], "still shaped as an object with an empty pets list, not a bare array");
+  assert.deepEqual(
+    noPetsBody.data.level_provenance.ladders, {},
+    "no pets means no ladder was used, so level_provenance.ladders must be empty, not carry unused entries"
+  );
 
   // section=slayers must derive a level for a known boss, carrying full
   // provenance (Hypixel publishes no slayer XP ladder itself).
@@ -215,11 +256,17 @@ export async function run() {
   const zombieLevel = slayersBody.data.zombie.level;
   assert.equal(zombieLevel.available, true, "a known slayer boss must derive a level");
   assert.equal(zombieLevel.level, 9, "1,000,000 XP is the top zombie threshold");
-  assert.equal(zombieLevel.level_source, "static_table");
-  assert.ok(zombieLevel.table_version);
-  assert.equal(zombieLevel.source_authority, "wiki");
-  assert.ok(zombieLevel.source_url);
-  assert.equal(zombieLevel.verify_on_wiki, true);
+  assert.ok(zombieLevel.ladder, "a known slayer boss's level must carry a ladder pointer");
+
+  const slayerProvenance = slayersBody.data.level_provenance;
+  assert.equal(slayerProvenance.level_source, "static_table");
+  assert.ok(slayerProvenance.table_version);
+  assert.equal(slayerProvenance.verify_on_wiki, true);
+  assertProvenanceResolves([zombieLevel], slayerProvenance, "slayers");
+
+  const zombieLadder = slayerProvenance.ladders[zombieLevel.ladder];
+  assert.equal(zombieLadder.source_authority, "wiki");
+  assert.ok(zombieLadder.source_url);
 
   // section=dungeons must derive both a Catacombs level and a class level.
   installMockFetch({
@@ -248,11 +295,27 @@ export async function run() {
   const catacombsLevel = dungeonsBody.data.dungeon_types.catacombs.level;
   assert.equal(catacombsLevel.available, true, "catacombs XP must derive a level");
   assert.equal(catacombsLevel.level, 1);
-  assert.equal(catacombsLevel.source_authority, "wiki");
+  assert.ok(catacombsLevel.ladder, "catacombs level must carry a ladder pointer");
   const tankLevel = dungeonsBody.data.player_classes.tank.level;
   assert.equal(tankLevel.available, true, "class XP must derive a level");
   assert.equal(tankLevel.level, 1);
-  assert.notEqual(tankLevel.source_authority, null);
+  assert.ok(tankLevel.ladder, "class level must carry a ladder pointer");
+
+  const dungeonProvenance = dungeonsBody.data.level_provenance;
+  assertProvenanceResolves([catacombsLevel, tankLevel], dungeonProvenance, "dungeons");
+
+  const catacombsLadder = dungeonProvenance.ladders[catacombsLevel.ladder];
+  assert.equal(catacombsLadder.source_authority, "wiki");
+
+  // dungeon_class is corroborated from a secondary, frozen wiki rather than
+  // read directly off the authoritative wiki (see levels.js) -- the one
+  // ladder here that must not claim pinned-wiki authority. Hoisting
+  // source_authority up to level_provenance's top level (rather than keeping
+  // it per-ladder) would silently relabel this as "wiki", so this is the
+  // assertion that would catch that regression.
+  const classLadder = dungeonProvenance.ladders[tankLevel.ladder];
+  assert.equal(classLadder.source_authority, "corroborated_secondary", "dungeon_class must not claim wiki authority");
+  assert.notEqual(classLadder.source_authority, "wiki");
 
   // bestiary's payload_truncated flag: false for a small, ordinary fixture...
   installMockFetch({
@@ -291,4 +354,49 @@ export async function run() {
   const wideBestiaryBody = await wideBestiaryResponse.json();
   assert.equal(wideBestiaryResponse.status, 200, JSON.stringify(wideBestiaryBody));
   assert.equal(wideBestiaryBody.data.payload_truncated, true, "an over-cap bestiary payload must be flagged truncated");
+
+  // The whole point of hoisting provenance out of every pet (instead of the
+  // 120-pet cap the previous pass used to dodge the 80,000-char response
+  // limit) is that 250 real pets -- PET_PAGE_CAP's pre-regression value --
+  // must fit again. This uses long, realistic identifiers throughout (a
+  // full-length pet UUID, a long real pet type name, the longest rarity
+  // string) rather than short placeholders, so the measurement means
+  // something: it is the actual worker response, through the same 80,000-char
+  // enforcement in src/http.js every other route goes through, not a
+  // hand-assembled approximation.
+  const widePets = Array.from({ length: 250 }, (_, i) => ({
+    uuid: `${String(i).padStart(8, "0")}-1111-2222-3333-444444444444`,
+    type: "PROTECTOR_DRAGON",
+    exp: 4_600_000 + i,
+    active: i === 0,
+    tier: "LEGENDARY",
+  }));
+  installMockFetch({
+    "/v2/skyblock/profiles": () => Response.json({
+      success: true,
+      profiles: [{
+        profile_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        cute_name: "Mango",
+        selected: true,
+        members: {
+          [playerUuid]: {
+            last_save: 100,
+            pets_data: { pets: widePets },
+          },
+        },
+      }],
+    }),
+  });
+  const widePetsResponse = await call(`/v1/player/section?uuid=${playerUuid}&section=pets`);
+  const widePetsText = await widePetsResponse.text();
+  assert.equal(widePetsResponse.status, 200, widePetsText);
+  assert.ok(
+    widePetsText.length < 80_000,
+    `a 250-pet response with long identifiers must stay under the 80,000-char cap (measured ${widePetsText.length})`
+  );
+  const widePetsBody = JSON.parse(widePetsText);
+  assert.equal(widePetsBody.data.total_pets, 250);
+  assert.equal(widePetsBody.data.returned, 250, "restoring PET_PAGE_CAP to 250 must return all 250, not cap at 120");
+  assert.equal(widePetsBody.data.truncated, false, "250 pets at a 250 cap must not be reported truncated");
+  assertProvenanceResolves(widePetsBody.data.pets.map((pet) => pet.level), widePetsBody.data.level_provenance, "wide pets");
 }

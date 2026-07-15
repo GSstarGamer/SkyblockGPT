@@ -878,35 +878,100 @@ function readTreeScopedValue(skillTree, key, scope) {
 // the LADDER_SOURCES suffix (zombie, spider, wolf, enderman, blaze, vampire).
 // A direct `slayer_${name}` lookup means an unrecognized boss key naturally
 // falls through to "no source" -- never a fallback to another boss's ladder.
-function slayerLadderSource(bossName) {
-  return LADDER_SOURCES[`slayer_${String(bossName || "").toLowerCase()}`] || null;
+// Returns the LADDER_SOURCES *key*, not the entry itself: callers need the
+// key both to resolve the ladder (deriveLevel) and to point back to it from
+// level_provenance.ladders (pointerLevel), so the key is the one shared
+// currency between the two.
+function slayerLadderKey(bossName) {
+  const key = `slayer_${String(bossName || "").toLowerCase()}`;
+  return LADDER_SOURCES[key] ? key : null;
 }
 
 // levelFromLadder itself reports `available: false` with `source_authority:
 // null` when handed a missing/invalid ladder, so routing the "no source"
 // case through it (rather than hand-building an unavailable object) keeps
 // exactly one place that defines what "level unavailable" looks like.
-function deriveLevel(experience, source) {
+function deriveLevel(experience, ladderKey) {
+  const source = ladderKey ? LADDER_SOURCES[ladderKey] : null;
   return source
     ? levelFromLadder(experience, source.ladder, { ...source, tableVersion: TABLE_VERSION })
     : levelFromLadder(experience, null, { tableVersion: TABLE_VERSION });
 }
 
+// Provenance (level_source, table_version, source_authority, source_url,
+// verify_on_wiki) is identical for every item sharing a ladder, so it is
+// hoisted out of the per-item level object and emitted once per section,
+// keyed by ladder. Each item instead carries a `ladder` pointer into
+// level_provenance.ladders. Strips `experience` too: every caller here
+// already keeps the item's original XP field, so restating it inside
+// `level` would just be a second duplicate.
+//
+// `usedLadders` is populated as a side effect (only for ladders that
+// actually produced an available level) so buildLevelProvenance can emit
+// exactly the ladders referenced -- no dangling pointers, no unused entries.
+function pointerLevel(experience, ladderKey, usedLadders) {
+  const result = deriveLevel(experience, ladderKey);
+  if (!result.available) {
+    return {
+      available: false,
+      level: null,
+      level_with_progress: null,
+      max_level: null,
+      xp_into_level: null,
+      xp_for_next_level: null,
+      progress_to_next_level: null,
+    };
+  }
+  usedLadders.add(ladderKey);
+  return {
+    available: true,
+    level: result.level,
+    level_with_progress: result.level_with_progress,
+    max_level: result.max_level,
+    xp_into_level: result.xp_into_level,
+    xp_for_next_level: result.xp_for_next_level,
+    progress_to_next_level: result.progress_to_next_level,
+    ladder: ladderKey,
+  };
+}
+
+// level_source, table_version and verify_on_wiki are identical across every
+// current ladder, so they sit at the top level. source_authority and
+// source_url vary per ladder (dungeon_class is corroborated_secondary, every
+// other ladder is wiki) so they stay inside ladders[key] -- flattening them
+// upward would relabel a secondary-wiki table as authoritative.
+function buildLevelProvenance(usedLadders) {
+  const ladders = {};
+  for (const key of usedLadders) {
+    const source = LADDER_SOURCES[key];
+    if (!source) continue;
+    ladders[key] = { source_authority: source.authority, source_url: source.sourceUrl };
+  }
+  return {
+    level_source: "static_table",
+    table_version: TABLE_VERSION,
+    verify_on_wiki: true,
+    ladders,
+  };
+}
+
 function compactSlayers(member) {
   const bosses = member?.slayer?.slayer_bosses || member?.slayer_bosses || {};
   const result = {};
+  const usedLadders = new Set();
 
   for (const [name, data] of Object.entries(bosses).slice(0, 30)) {
     const sanitized = objectOrEmpty(sanitize(data, 4, 100));
-    result[name] = { ...sanitized, level: deriveLevel(data?.xp, slayerLadderSource(name)) };
+    result[name] = { ...sanitized, level: pointerLevel(data?.xp, slayerLadderKey(name), usedLadders) };
   }
-  return result;
+  return { ...result, level_provenance: buildLevelProvenance(usedLadders) };
 }
 
 function compactDungeons(member) {
   const raw = member?.dungeons || {};
   const dungeonTypes = {};
   const classes = {};
+  const usedLadders = new Set();
 
   for (const [name, data] of Object.entries(raw.dungeon_types || {}).slice(0, 20)) {
     const picked = pick(data, [
@@ -922,20 +987,21 @@ function compactDungeons(member) {
     ]);
     // Only Catacombs has a sourced ladder; other dungeon types (if Hypixel
     // ever adds one) report level unavailable rather than reusing this one.
-    const source = name === "catacombs" ? LADDER_SOURCES.catacombs : null;
-    dungeonTypes[name] = { ...picked, level: deriveLevel(data?.experience, source) };
+    const ladderKey = name === "catacombs" ? "catacombs" : null;
+    dungeonTypes[name] = { ...picked, level: pointerLevel(data?.experience, ladderKey, usedLadders) };
   }
 
   for (const [name, data] of Object.entries(raw.player_classes || {}).slice(0, 20)) {
     const picked = pick(data, ["experience"]);
     // All dungeon classes share one XP curve (LADDER_SOURCES.dungeon_class).
-    classes[name] = { ...picked, level: deriveLevel(data?.experience, LADDER_SOURCES.dungeon_class) };
+    classes[name] = { ...picked, level: pointerLevel(data?.experience, "dungeon_class", usedLadders) };
   }
 
   return {
     selected_dungeon_class: raw.selected_dungeon_class || null,
     dungeon_types: sanitize(dungeonTypes, 5, 300),
     player_classes: sanitize(classes, 4, 100),
+    level_provenance: buildLevelProvenance(usedLadders),
   };
 }
 
@@ -952,13 +1018,16 @@ const PET_FIELDS = [
   "skin",
 ];
 
-// Each pet's derived level carries the full levelFromLadder provenance
+// Each pet's derived level used to carry the full levelFromLadder provenance
 // (level_source, table_version, source_authority, source_url,
-// verify_on_wiki), the same shape Change 3 requires for slayers/dungeons.
-// That repeats a ~550-byte object per pet, so the page size is capped well
-// below sanitize's normal 250-entry ceiling to stay inside the Worker's
-// 80,000-char response limit (src/http.js) even for a maxed-out pet count.
-const PET_PAGE_CAP = 120;
+// verify_on_wiki) inline. That provenance is identical for every pet sharing
+// a ladder, so it is now hoisted once per response into `level_provenance`
+// (see pointerLevel/buildLevelProvenance above) and each pet just points at
+// its ladder by key. That removes the per-pet duplication that used to force
+// a page size well below sanitize's normal 250-entry ceiling, so the cap
+// matches sanitize's ceiling again -- see the 250-pet size assertion in
+// scripts/tests/sections.test.mjs for the measured worst case.
+const PET_PAGE_CAP = 250;
 
 const PET_RARITY_ORDER = ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"];
 const PET_RARITY_LADDER_KEYS = {
@@ -982,9 +1051,11 @@ function boostedPetRarity(tier) {
 
 // Golden Dragon has its own ladder (levels 1-200) rather than the shared
 // Legendary curve, so its type is checked before falling back to tier.
-function resolvePetLadderSource(pet) {
+// Returns the LADDER_SOURCES key (not the entry) -- see slayerLadderKey for
+// why: the key is what both deriveLevel and the level_provenance pointer need.
+function resolvePetLadderKey(pet) {
   const type = typeof pet?.type === "string" ? pet.type.toUpperCase() : null;
-  if (type === "GOLDEN_DRAGON") return LADDER_SOURCES.golden_dragon;
+  if (type === "GOLDEN_DRAGON") return "golden_dragon";
 
   const tier = typeof pet?.tier === "string" ? pet.tier.toUpperCase() : null;
   if (!tier) return null;
@@ -993,12 +1064,11 @@ function resolvePetLadderSource(pet) {
   const effectiveTier = heldItem === "PET_ITEM_TIER_BOOST" ? boostedPetRarity(tier) : tier;
   if (!effectiveTier) return null;
 
-  const ladderKey = PET_RARITY_LADDER_KEYS[effectiveTier];
-  return ladderKey ? LADDER_SOURCES[ladderKey] : null;
+  return PET_RARITY_LADDER_KEYS[effectiveTier] || null;
 }
 
-function derivePetLevel(pet) {
-  return deriveLevel(pet?.exp, resolvePetLadderSource(pet));
+function derivePetLevel(pet, usedLadders) {
+  return pointerLevel(pet?.exp, resolvePetLadderKey(pet), usedLadders);
 }
 
 function compactPets(member) {
@@ -1014,14 +1084,16 @@ function compactPets(member) {
       returned: 0,
       truncated: false,
       pets: [],
+      level_provenance: buildLevelProvenance(new Set()),
       reason: "Hypixel did not expose pet data for this player on this profile.",
     };
   }
 
   const totalPets = rawPets.length;
+  const usedLadders = new Set();
   const pets = rawPets.slice(0, PET_PAGE_CAP).map((pet) => ({
     ...pick(pet, PET_FIELDS),
-    level: derivePetLevel(pet),
+    level: derivePetLevel(pet, usedLadders),
   }));
 
   return {
@@ -1030,6 +1102,7 @@ function compactPets(member) {
     returned: pets.length,
     truncated: totalPets > PET_PAGE_CAP,
     pets,
+    level_provenance: buildLevelProvenance(usedLadders),
     reason: null,
   };
 }
