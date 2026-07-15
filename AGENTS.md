@@ -31,7 +31,7 @@ Do not edit a generated release ZIP or treat it as source. Make changes in the f
 5. Missing, disabled, partial, or undecodable API data is unknown/unavailable—not zero and not evidence of a bad setup.
 6. Never call a partial auction-page scan a global lowest BIN. Preserve exact item-ID/NBT comparability and expose scan completeness.
 7. Keep responses compact and pageable. The Worker deliberately rejects JSON bodies over 80,000 characters to avoid ChatGPT connector failures.
-8. Preserve the casual, nonchalant-but-helpful personality. Accuracy wins over jokes. Public description text must end with `Made by GS`.
+8. Preserve the nonchalant, roast-heavy veteran-player personality: dismissive tone, complete substance. Nonchalance is never an excuse to shorten or hand-wave an answer. Roasts target builds, gear, and decisions—never the person. No personal attacks, no slurs, and no exception for third-party players the user looked up; the GPT is public and its audience skews young. The GPT never claims to be human. Accuracy wins over jokes. Public description text must end with `Made by GS`.
 9. Use matched wiki images when useful, but never invent image URLs. Image selection is a GPT/web-search responsibility, not a Worker responsibility.
 10. The public GPT asks for/resolves the current user's IGN. It must not assume cross-chat memory or silently use the creator's IGN.
 
