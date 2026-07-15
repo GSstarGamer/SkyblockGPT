@@ -26,6 +26,8 @@ An audit of `src/` against the Hypixel SkyBlock API found two distinct classes o
 | 7 | Dead code | `mapInBatches` (`src/util.js:1`) is declared, never used, never exported. |
 | 8 | Fake batching | `src/routes/market.js:231-240` slices one page per iteration, so the `Promise.all` is decorative and fetches are sequential. |
 | 9 | `backpack_icons` misclassified as backpacks | `src/items.js:123`. Icon blobs match `/backpack/` and appear as fake containers in the inventory index. |
+| 10 | Lowest-BIN decodes eagerly, then sorts | `src/routes/market.js:247-267` decodes up to 100 candidates, then sorts by price, then returns the cheapest `limit`. Price (`starting_bid`) is a plain JSON field needing no decode, so sorting first and decoding lazily yields identical output for ~10-20 decodes instead of 100. Each decode is base64 + gzip + full NBT walk (`src/nbt.js`). |
+| 11 | Sort comparators recompute derived prices | `src/routes/market.js:139-143` calls `auctionPrice()` / `binPrice()` inside comparators, recomputing them O(n log n) times across ~1000 upstream auctions. Precompute once per record before sorting. |
 
 ### Dropped member data
 
@@ -52,7 +54,8 @@ An earlier draft called `fetchProfiles` `cacheSeconds: 0` a performance bug and 
 | Slicing | Prep phase, then 4 parallel lanes, then sequential contract phase | Findings share files; `src/sections.js` alone is touched by 5 of them |
 | Lowest-BIN | Honest contract + client-side merge | No new infra, works on any Cloudflare plan. Costs ~20 Action calls per full scan |
 | Level tables | Worker `src/levels.js` with provenance fields | Testable, versioned, auto-deploys, no GPT sync. A stale `gpt/knowledge/` file fails silently (`AGENTS.md:113`) |
-| Cache floor | Player 0, market 0, static 6h; delete `persistentCache` | Values change fast; only genuinely static ID/threshold tables stay cached |
+| Cache floor | Player 0, market 0, static 6h; delete `persistentCache` | Values change fast; only genuinely static ID/threshold tables stay cached. No Cloudflare cache is configured, confirming the branch is unreachable |
+| CPU exhaustion | Sort before decode, then a proactive decode counter | Cloudflare error 1102 is uncatchable, so graceful handling must happen before the limit, not at it. Lazy decoding cuts the cost ~80-90%, making exhaustion unlikely in the first place |
 
 ## Concurrency safety model
 
@@ -124,22 +127,62 @@ Disjoint file ownership. No lane touches `actions/` or `gpt/`.
 
 ### Lane B — `src/routes/market.js`, `src/market.js`
 
-Lowest-BIN honest contract. Keep the 4-page cap; stop pretending.
+#### Sort before decode
+
+The dominant cost in this route is NBT decoding: base64 character loop, gzip stream, and a full tree walk per auction (`src/nbt.js`). Today `:247-267` decodes every candidate (capped at 100), *then* sorts by price, *then* returns the cheapest `limit`.
+
+Invert it. `starting_bid` is a plain JSON field, so price is known without decoding:
+
+1. Prefilter by name and filters — no decode.
+2. Sort candidates by `starting_bid` ascending — no decode.
+3. Walk ascending, decoding one at a time, keeping exact-`skyblock_id` matches.
+4. Stop at `limit` confirmed matches or when the decode budget is spent.
+
+Identical output, typically 10-20 decodes instead of 100 — roughly 80-90% less CPU.
+
+This also **removes** a completeness caveat. The `maximumCandidateDecodes = 100` cap and its `candidate_decode_truncated` flag exist only because decoding was eager; lazy decoding retires both. Correctness improves as a side effect of the optimization.
+
+#### Decode budget, not error recovery
+
+Cloudflare terminates the isolate on CPU exhaustion (error 1102). It is **not a catchable JS exception** — no handler runs and the client receives an opaque 5xx. Any design that plans to catch CPU exhaustion and return a graceful response is not implementable. The Worker must never reach the limit.
+
+A `decode_budget` (default 60) guards the pathological case where the name prefilter matches many auctions but few match the exact item ID. Exhausting it returns a normal 200 carrying `decode_budget_exhausted: true`, `complete: false`, and `next_start_page`, so the GPT continues in a further call rather than dying.
+
+The budget is a **decode counter, not a wall-clock deadline**. `Date.now()` does not advance between I/O operations in Workers, so a timer inside a decode loop is unreliable; a counter is also deterministic and therefore testable.
+
+As defense in depth, Phase 2 teaches the GPT via `gpt/knowledge/market-playbook.md` that a 5xx from this route means reduce `max_pages` and resume from the last `next_start_page` — covering the case where the platform limit is hit despite the budget.
+
+#### Honest segment contract
+
+Keep the 4-page cap; stop pretending.
 
 ```
 scan: {
   snapshot_last_updated,
-  segments_required,     // NEW: ceil(totalPages / max_pages)
-  segment_index,         // NEW: floor(start_page / max_pages)
-  next_start_page,       // existing, null when done
-  complete               // true only when this segment covers all pages
+  segments_required,          // NEW: ceil(totalPages / max_pages)
+  segment_index,              // NEW: floor(start_page / max_pages)
+  next_start_page,            // existing, null when done
+  complete,                   // true only when this segment covers all pages
+  name_prefilter_candidates,  // existing
+  decodes_performed,          // NEW: actual decode count, for cost visibility
+  decode_budget_exhausted,    // NEW: replaces candidate_decode_truncated
+  decode_failures             // existing
 }
-segment_lowest_bin       // existing
+segment_lowest_bin            // existing
+match_count_in_segment        // CHANGED: now a lower bound — see below
 ```
+
+Lazy decoding means the true match count is no longer known: the scan stops once it has enough cheap confirmed matches and never learns how many pricier ones existed. `match_count_in_segment` therefore becomes a lower bound, paired with `match_count_is_lower_bound: true`. This is an honest narrowing, not a loss — the field's only real consumer is the cheapest-price question, which lazy decoding answers exactly. `name_prefilter_candidates` still gives the pre-decode population.
+
+`candidate_decode_truncated` is removed. It described a limitation that lazy decoding eliminates.
 
 The GPT loops on `next_start_page`, carrying `expected_last_updated`, keeping a running minimum, and may declare a genuine global lowest BIN once `next_start_page` is null and the snapshot held. Non-negotiable product rule 6 in `AGENTS.md` stays satisfied: no page-local minimum is ever called global, and `authoritative_lowest_bin` stays null on every individual segment.
 
 Also remove the fake one-page batching at `:231-240` and fetch remaining pages in a real parallel batch.
+
+#### `/v1/auctions/page`
+
+Already cheap: summary mode never decodes, and `page_lowest_bin` is computed from plain fields. One fix only — precompute `auctionPrice` / `binPrice` per record before sorting instead of recomputing inside comparators across ~1000 auctions (finding #11).
 
 New response fields ship **before** they appear in the OpenAPI. Additive response fields do not break a Custom GPT, and this keeps `actions/` single-owner. Phase 2 documents them and teaches the GPT to loop; until then behavior is unchanged.
 
