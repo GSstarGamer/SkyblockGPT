@@ -1,4 +1,5 @@
 import {
+  createTruncationReport,
   firstNumber,
   isoFromUnixMs,
   normalizeUnixMilliseconds,
@@ -38,7 +39,8 @@ export const PROFILE_SECTIONS = new Set([
 
 export function compactGarden(garden) {
   const value = objectOrEmpty(garden);
-  return sanitize({
+  const report = createTruncationReport();
+  const sanitized = sanitize({
     uuid: value.uuid || null,
     garden_experience: value.garden_experience,
     commission_data: value.commission_data,
@@ -53,7 +55,10 @@ export function compactGarden(garden) {
       "uuid", "garden_experience", "commission_data", "composter_data", "active_commissions", "resources_collected",
       "crop_upgrade_levels", "unlocked_plots_ids", "unlocked_barn_skins", "selected_barn_skin",
     ]).has(key))),
-  }, 10, 2_000);
+  }, 10, 2_000, report);
+  // The flag is attached after sanitize runs so it is not itself subject to
+  // the depth/entry limits it describes.
+  return { ...sanitized, garden_truncated: report.truncated };
 }
 
 const MUSEUM_ITEMS_PER_ENTRY = 8;
@@ -804,6 +809,7 @@ function compactPowder(core, type) {
 function compactStats(member, skillResource = null) {
   const lifetime = objectOrEmpty(member?.player_stats);
   const skills = compactSkills(member, skillResource);
+  const lifetimeCountersReport = createTruncationReport();
 
   return {
     skills,
@@ -827,7 +833,8 @@ function compactStats(member, skillResource = null) {
       skill: skills.skills.fishing || null,
       lifetime_counters: filterNumericStats(lifetime, /fish|sea_creature|trophy/i),
     },
-    lifetime_counters: sanitize(lifetime, 6, 900),
+    lifetime_counters: sanitize(lifetime, 6, 900, lifetimeCountersReport),
+    lifetime_counters_truncated: lifetimeCountersReport.truncated,
     current_effective_stats: {
       available: false,
       reason: "Hypixel does not return one authoritative snapshot of current Health, Strength, Defense, Mining Speed, Mining Fortune, and similar gear/buff totals. Those must be derived from exposed gear, pets, perks, accessories, skills, and location-specific effects.",
