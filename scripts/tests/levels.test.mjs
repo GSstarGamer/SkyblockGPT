@@ -8,6 +8,7 @@ import {
   LADDER_AUTHORITY,
   LADDER_AUTHORITY_CORROBORATED,
   LADDER_AUTHORITY_WIKI,
+  LADDER_SOURCES,
   PET_LADDERS,
   SLAYER_LADDERS,
   TABLE_VERSION,
@@ -52,9 +53,11 @@ export async function run() {
   assert.equal(max.table_version, "test-1");
   assert.equal(max.verify_on_wiki, true);
 
-  // Authority and source URL default when options omit them: wiki-sourced,
-  // no specific page cited.
-  assert.equal(max.source_authority, LADDER_AUTHORITY_WIKI, "authority defaults to wiki");
+  // Authority and source URL default to unknown when options omit them.
+  // Undeclared provenance must read as unknown, never as a confident claim of
+  // wiki authority -- this is the fail-safe guarantee: it must fail here if
+  // the old "wiki" default is ever reintroduced.
+  assert.equal(max.source_authority, null, "authority defaults to null, not wiki");
   assert.equal(max.source_url, null, "source_url defaults to null");
 
   // A caller can declare a different authority and cite a source page.
@@ -73,8 +76,9 @@ export async function run() {
   assert.equal(missing.experience, null);
   assert.equal(missing.available, false);
 
-  // Unavailable results must not silently drop provenance either.
-  assert.equal(missing.source_authority, LADDER_AUTHORITY_WIKI, "unavailable defaults to wiki authority");
+  // Unavailable results must not silently drop provenance either, and must
+  // default to unknown for the same fail-safe reason as the available path.
+  assert.equal(missing.source_authority, null, "unavailable defaults to null, not wiki authority");
   assert.equal(missing.source_url, null, "unavailable defaults to null source_url");
 
   const missingCorroborated = levelFromLadder(null, ladder, {
@@ -301,4 +305,43 @@ export async function run() {
     LADDER_AUTHORITY_WIKI,
     "class ladder result must not claim wiki authority",
   );
+
+  // -------------------------------------------------------------------------
+  // LADDER_SOURCES: every ladder bundled with the authority, source URL and
+  // cap a caller needs, so a consumer cannot pair a ladder with the wrong
+  // authority, forget the URL, or forget the option entirely.
+  // -------------------------------------------------------------------------
+  const validAuthorities = new Set([LADDER_AUTHORITY_WIKI, LADDER_AUTHORITY_CORROBORATED]);
+  for (const [name, src] of Object.entries(LADDER_SOURCES)) {
+    assert.ok(Array.isArray(src.ladder) && src.ladder.length > 0, `${name} has a real ladder`);
+    assert.ok(src.sourceUrl, `${name} has a non-null sourceUrl`);
+    assert.ok(
+      validAuthorities.has(src.authority),
+      `${name} authority is one of the two exported LADDER_AUTHORITY constants`,
+    );
+    assert.equal(
+      src.maxLevel,
+      src.ladder.length,
+      `${name} maxLevel matches its ladder's actual length`,
+    );
+  }
+
+  // The one entry that must not claim pinned-wiki authority: DUNGEON_CLASS_LADDER
+  // came from wiki.hypixel.net, not hypixelskyblock.minecraft.wiki (AGENTS.md
+  // rule 4), which publishes no class ladder at all.
+  assert.equal(LADDER_SOURCES.dungeon_class.authority, LADDER_AUTHORITY_CORROBORATED);
+  assert.ok(
+    LADDER_SOURCES.dungeon_class.sourceUrl.includes("wiki.hypixel.net"),
+    "dungeon_class source points at the secondary wiki, not the pinned one",
+  );
+
+  // A caller wiring LADDER_SOURCES cannot forget provenance: spreading an
+  // entry into levelFromLadder must carry its declared authority and URL, not
+  // fall back to the fail-safe null default.
+  const fromSources = levelFromLadder(400, LADDER_SOURCES.slayer_vampire.ladder, {
+    ...LADDER_SOURCES.slayer_vampire,
+    tableVersion: TABLE_VERSION,
+  });
+  assert.equal(fromSources.source_authority, LADDER_AUTHORITY_WIKI);
+  assert.equal(fromSources.source_url, "https://hypixelskyblock.minecraft.wiki/Slayer");
 }

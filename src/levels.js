@@ -237,6 +237,114 @@ export const GOLDEN_DRAGON_LADDER = (() => {
   return cumulativeFrom([...legendarySteps, ...beyond]);
 })();
 
+// ---------------------------------------------------------------------------
+// Bundles every ladder with the authority and source URL a caller must pass to
+// levelFromLadder, so a consumer cannot pair a ladder with the wrong authority,
+// forget the URL, or forget the option entirely -- in which case
+// levelFromLadder now reports source_authority: null rather than guessing
+// LADDER_AUTHORITY_WIKI. A caller writes:
+//   levelFromLadder(xp, src.ladder, { ...src, tableVersion: TABLE_VERSION })
+//
+// sourceUrl values are copied from the "Source:" line already cited above each
+// ladder; where that comment also lists cross-check or corroboration pages,
+// this uses the one the numbers were actually read from, not the checks.
+// maxLevel is each ladder's own .length: every ladder here tabulates exactly up
+// to its cap, with no padding past it, so the cap does not need restating by
+// hand (and cannot drift from the ladder it is paired with).
+// ---------------------------------------------------------------------------
+export const LADDER_SOURCES = {
+  slayer_zombie: {
+    ladder: SLAYER_LADDERS.zombie,
+    maxLevel: SLAYER_LADDERS.zombie.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+  },
+  slayer_spider: {
+    ladder: SLAYER_LADDERS.spider,
+    maxLevel: SLAYER_LADDERS.spider.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+  },
+  slayer_wolf: {
+    ladder: SLAYER_LADDERS.wolf,
+    maxLevel: SLAYER_LADDERS.wolf.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+  },
+  slayer_enderman: {
+    ladder: SLAYER_LADDERS.enderman,
+    maxLevel: SLAYER_LADDERS.enderman.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+  },
+  slayer_blaze: {
+    ladder: SLAYER_LADDERS.blaze,
+    maxLevel: SLAYER_LADDERS.blaze.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+  },
+  slayer_vampire: {
+    ladder: SLAYER_LADDERS.vampire,
+    maxLevel: SLAYER_LADDERS.vampire.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Slayer",
+  },
+  catacombs: {
+    ladder: CATACOMBS_LADDER,
+    maxLevel: CATACOMBS_LADDER.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Dungeoneering/Leveling_Rewards",
+  },
+  dungeon_class: {
+    ladder: DUNGEON_CLASS_LADDER,
+    maxLevel: DUNGEON_CLASS_LADDER.length,
+    authority: LADDER_AUTHORITY_CORROBORATED,
+    sourceUrl: "https://wiki.hypixel.net/Classes",
+  },
+  pet_common: {
+    ladder: PET_LADDERS.common,
+    maxLevel: PET_LADDERS.common.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+  },
+  pet_uncommon: {
+    ladder: PET_LADDERS.uncommon,
+    maxLevel: PET_LADDERS.uncommon.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+  },
+  pet_rare: {
+    ladder: PET_LADDERS.rare,
+    maxLevel: PET_LADDERS.rare.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+  },
+  pet_epic: {
+    ladder: PET_LADDERS.epic,
+    maxLevel: PET_LADDERS.epic.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+  },
+  pet_legendary: {
+    ladder: PET_LADDERS.legendary,
+    maxLevel: PET_LADDERS.legendary.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+  },
+  pet_mythic: {
+    ladder: PET_LADDERS.mythic,
+    maxLevel: PET_LADDERS.mythic.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData",
+  },
+  golden_dragon: {
+    ladder: GOLDEN_DRAGON_LADDER,
+    maxLevel: GOLDEN_DRAGON_LADDER.length,
+    authority: LADDER_AUTHORITY_WIKI,
+    sourceUrl: "https://hypixelskyblock.minecraft.wiki/Golden_Dragon_Pet",
+  },
+};
+
 function unavailable(experience, tableVersion, authority, sourceUrl) {
   return {
     available: false,
@@ -260,15 +368,18 @@ function unavailable(experience, tableVersion, authority, sourceUrl) {
  *
  * @param {number|null} experience Total accumulated XP, or null when the API did not expose it.
  * @param {number[]} ladder Cumulative XP required to reach level 1, 2, 3, ...
- * @param {{ maxLevel?: number, tableVersion: string, authority?: string, sourceUrl?: string|null }} options
+ * @param {{ maxLevel?: number, tableVersion: string, authority?: string|null, sourceUrl?: string|null }} options
  *   `authority` distinguishes which wiki a ladder came from (see LADDER_AUTHORITY
- *   above); it defaults to LADDER_AUTHORITY_WIKI and must be passed explicitly by
- *   callers using a ladder recorded there as LADDER_AUTHORITY_CORROBORATED, e.g.
- *   DUNGEON_CLASS_LADDER. It is never inferred from the ladder's contents.
+ *   and LADDER_SOURCES below). It defaults to null, NOT LADDER_AUTHORITY_WIKI:
+ *   undeclared provenance must read as unknown, never as a confident claim of
+ *   authoritative sourcing. It is never inferred from the ladder's contents.
+ *   Callers should prefer spreading an entry from LADDER_SOURCES rather than
+ *   passing `authority`/`sourceUrl` by hand, so a ladder cannot be paired with
+ *   the wrong authority or the option cannot be forgotten silently.
  */
 export function levelFromLadder(experience, ladder, options) {
   const tableVersion = options?.tableVersion || "unknown";
-  const authority = options?.authority ?? LADDER_AUTHORITY_WIKI;
+  const authority = options?.authority ?? null;
   const sourceUrl = options?.sourceUrl ?? null;
   const xp = optionalNumber(experience);
   if (xp === null || !Array.isArray(ladder) || !ladder.length) {
