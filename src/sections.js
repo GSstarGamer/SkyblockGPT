@@ -19,6 +19,7 @@ import {
   decodeInventoryBlob,
   formatItemId,
 } from "./items.js";
+import { LADDER_SOURCES, TABLE_VERSION, levelFromLadder } from "./levels.js";
 
 export const PROFILE_SECTIONS = new Set([
   "overview",
@@ -339,10 +340,14 @@ export async function buildSection(section, profile, member, skillResource = nul
       return compactPets(member);
     case "accessories":
       return await compactAccessories(member);
-    case "bestiary":
-      return sanitize(member.bestiary || {}, 5, 700);
-    case "rift":
-      return sanitize(member.rift || {}, 6, 500);
+    case "bestiary": {
+      const report = createTruncationReport();
+      return { ...sanitize(member.bestiary || {}, 5, 700, report), payload_truncated: report.truncated };
+    }
+    case "rift": {
+      const report = createTruncationReport();
+      return { ...sanitize(member.rift || {}, 6, 500, report), payload_truncated: report.truncated };
+    }
     default:
       return {};
   }
@@ -869,12 +874,31 @@ function readTreeScopedValue(skillTree, key, scope) {
   return value;
 }
 
+// Hypixel's slayer_bosses keys are already the lowercase boss names used as
+// the LADDER_SOURCES suffix (zombie, spider, wolf, enderman, blaze, vampire).
+// A direct `slayer_${name}` lookup means an unrecognized boss key naturally
+// falls through to "no source" -- never a fallback to another boss's ladder.
+function slayerLadderSource(bossName) {
+  return LADDER_SOURCES[`slayer_${String(bossName || "").toLowerCase()}`] || null;
+}
+
+// levelFromLadder itself reports `available: false` with `source_authority:
+// null` when handed a missing/invalid ladder, so routing the "no source"
+// case through it (rather than hand-building an unavailable object) keeps
+// exactly one place that defines what "level unavailable" looks like.
+function deriveLevel(experience, source) {
+  return source
+    ? levelFromLadder(experience, source.ladder, { ...source, tableVersion: TABLE_VERSION })
+    : levelFromLadder(experience, null, { tableVersion: TABLE_VERSION });
+}
+
 function compactSlayers(member) {
   const bosses = member?.slayer?.slayer_bosses || member?.slayer_bosses || {};
   const result = {};
 
   for (const [name, data] of Object.entries(bosses).slice(0, 30)) {
-    result[name] = sanitize(data, 4, 100);
+    const sanitized = objectOrEmpty(sanitize(data, 4, 100));
+    result[name] = { ...sanitized, level: deriveLevel(data?.xp, slayerLadderSource(name)) };
   }
   return result;
 }
@@ -885,7 +909,7 @@ function compactDungeons(member) {
   const classes = {};
 
   for (const [name, data] of Object.entries(raw.dungeon_types || {}).slice(0, 20)) {
-    dungeonTypes[name] = pick(data, [
+    const picked = pick(data, [
       "experience",
       "highest_tier_completed",
       "times_played",
@@ -896,10 +920,16 @@ function compactDungeons(member) {
       "fastest_time_s_plus",
       "best_score",
     ]);
+    // Only Catacombs has a sourced ladder; other dungeon types (if Hypixel
+    // ever adds one) report level unavailable rather than reusing this one.
+    const source = name === "catacombs" ? LADDER_SOURCES.catacombs : null;
+    dungeonTypes[name] = { ...picked, level: deriveLevel(data?.experience, source) };
   }
 
   for (const [name, data] of Object.entries(raw.player_classes || {}).slice(0, 20)) {
-    classes[name] = pick(data, ["experience"]);
+    const picked = pick(data, ["experience"]);
+    // All dungeon classes share one XP curve (LADDER_SOURCES.dungeon_class).
+    classes[name] = { ...picked, level: deriveLevel(data?.experience, LADDER_SOURCES.dungeon_class) };
   }
 
   return {
@@ -909,21 +939,98 @@ function compactDungeons(member) {
   };
 }
 
-function compactPets(member) {
-  const pets = member?.pets_data?.pets || member?.pets || [];
-  if (!Array.isArray(pets)) return [];
+const PET_FIELDS = [
+  "uuid",
+  "type",
+  "exp",
+  "active",
+  "tier",
+  "heldItem",
+  "held_item",
+  "candyUsed",
+  "candy_used",
+  "skin",
+];
 
-  return pets.slice(0, 250).map((pet) => pick(pet, [
-    "uuid",
-    "type",
-    "exp",
-    "active",
-    "tier",
-    "heldItem",
-    "held_item",
-    "candyUsed",
-    "candy_used",
-    "skin",
-  ]));
+// Each pet's derived level carries the full levelFromLadder provenance
+// (level_source, table_version, source_authority, source_url,
+// verify_on_wiki), the same shape Change 3 requires for slayers/dungeons.
+// That repeats a ~550-byte object per pet, so the page size is capped well
+// below sanitize's normal 250-entry ceiling to stay inside the Worker's
+// 80,000-char response limit (src/http.js) even for a maxed-out pet count.
+const PET_PAGE_CAP = 120;
+
+const PET_RARITY_ORDER = ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"];
+const PET_RARITY_LADDER_KEYS = {
+  COMMON: "pet_common",
+  UNCOMMON: "pet_uncommon",
+  RARE: "pet_rare",
+  EPIC: "pet_epic",
+  LEGENDARY: "pet_legendary",
+  MYTHIC: "pet_mythic",
+};
+
+// PET_ITEM_TIER_BOOST raises a pet's effective rarity by one step for
+// leveling purposes. A boosted Mythic pet has no rarity above it to boost
+// into, so this returns null and the caller reports the level unavailable
+// instead of guessing.
+function boostedPetRarity(tier) {
+  const index = PET_RARITY_ORDER.indexOf(tier);
+  if (index === -1 || index === PET_RARITY_ORDER.length - 1) return null;
+  return PET_RARITY_ORDER[index + 1];
+}
+
+// Golden Dragon has its own ladder (levels 1-200) rather than the shared
+// Legendary curve, so its type is checked before falling back to tier.
+function resolvePetLadderSource(pet) {
+  const type = typeof pet?.type === "string" ? pet.type.toUpperCase() : null;
+  if (type === "GOLDEN_DRAGON") return LADDER_SOURCES.golden_dragon;
+
+  const tier = typeof pet?.tier === "string" ? pet.tier.toUpperCase() : null;
+  if (!tier) return null;
+
+  const heldItem = pet?.heldItem ?? pet?.held_item ?? null;
+  const effectiveTier = heldItem === "PET_ITEM_TIER_BOOST" ? boostedPetRarity(tier) : tier;
+  if (!effectiveTier) return null;
+
+  const ladderKey = PET_RARITY_LADDER_KEYS[effectiveTier];
+  return ladderKey ? LADDER_SOURCES[ladderKey] : null;
+}
+
+function derivePetLevel(pet) {
+  return deriveLevel(pet?.exp, resolvePetLadderSource(pet));
+}
+
+function compactPets(member) {
+  const rawPets = member?.pets_data?.pets ?? member?.pets;
+
+  // Distinguish "Hypixel exposed no pet data" (missing/non-array field) from
+  // "Hypixel exposed pet data and the player genuinely has zero pets" (an
+  // actual empty array). Only the former is unavailable.
+  if (!Array.isArray(rawPets)) {
+    return {
+      available: false,
+      total_pets: null,
+      returned: 0,
+      truncated: false,
+      pets: [],
+      reason: "Hypixel did not expose pet data for this player on this profile.",
+    };
+  }
+
+  const totalPets = rawPets.length;
+  const pets = rawPets.slice(0, PET_PAGE_CAP).map((pet) => ({
+    ...pick(pet, PET_FIELDS),
+    level: derivePetLevel(pet),
+  }));
+
+  return {
+    available: true,
+    total_pets: totalPets,
+    returned: pets.length,
+    truncated: totalPets > PET_PAGE_CAP,
+    pets,
+    reason: null,
+  };
 }
 
