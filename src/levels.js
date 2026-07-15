@@ -77,17 +77,76 @@ export const CATACOMBS_LADDER = [
 // step is exposed separately rather than invented out to an arbitrary level.
 export const CATACOMBS_COSMETIC_LEVEL_XP = 200000000;
 
-// DUNGEON_CLASS_LADDER is deliberately absent: the wiki does not publish one.
-// See scripts/tests/levels.test.mjs and the Task 8 report. The class pages
-// (https://hypixelskyblock.minecraft.wiki/Classes, /Healer, /Dungeoneering and
-// its only subpages /Leveling_Rewards and /Skill_UI) publish per-level *rewards*
-// and confirm class level 1 costs 50 XP, the same cap of 50, and the same
-// 200m post-50 step as Catacombs -- but they never tabulate class thresholds for
-// levels 2-50, and never state that they equal the Catacombs thresholds.
-// Aliasing this to CATACOMBS_LADDER would be an inference shipped under
-// level_source: "static_table" and verify_on_wiki: true, which is exactly the
-// kind of unsourced number this module exists to avoid. A missing ladder is a
-// known gap; a wrong one silently misreports every class level.
+// ---------------------------------------------------------------------------
+// Ladder authority. Every other table in this module comes from the wiki this
+// repo designates as authoritative (AGENTS.md rule 4:
+// hypixelskyblock.minecraft.wiki). DUNGEON_CLASS_LADDER does not -- that wiki
+// publishes no class ladder -- so its provenance is weaker and must not be
+// silently equated with the rest. levelFromLadder reports a single
+// level_source/verify_on_wiki for all ladders; until that can carry authority
+// too, consumers look the ladder up here.
+// ---------------------------------------------------------------------------
+
+// Transcribed from the wiki named in AGENTS.md rule 4.
+export const LADDER_AUTHORITY_WIKI = "wiki";
+// From a secondary source, accepted only because that source also publishes a
+// table we already verified independently, and matches it exactly.
+export const LADDER_AUTHORITY_CORROBORATED = "corroborated_secondary";
+
+export const LADDER_AUTHORITY = {
+  slayer: LADDER_AUTHORITY_WIKI,
+  catacombs: LADDER_AUTHORITY_WIKI,
+  dungeon_class: LADDER_AUTHORITY_CORROBORATED,
+  pets: LADDER_AUTHORITY_WIKI,
+  golden_dragon: LADDER_AUTHORITY_WIKI,
+};
+
+// Source: https://wiki.hypixel.net/Classes (section "Leveling", the "XP
+// Required" table, "Total" column), revision of 2024-11-11.
+//
+// NOT the wiki this repo treats as authoritative. hypixelskyblock.minecraft.wiki
+// still publishes no class ladder: /Classes, /Healer and /Dungeoneering (plus its
+// only subpages /Leveling_Rewards and /Skill_UI) give per-level *rewards* only.
+// wiki.hypixel.net is a second, Hypixel-hosted wiki whose SkyBlock pages have
+// been frozen since November 2024. Hence LADDER_AUTHORITY_CORROBORATED, not
+// LADDER_AUTHORITY_WIKI.
+//
+// It is trusted here only because it is checkable. The same wiki's /Dungeoneering
+// page publishes a *separate* Catacombs "XP Required" table, and all 50 of its
+// Total values equal CATACOMBS_LADDER above, which was independently transcribed
+// and verified twice from hypixelskyblock.minecraft.wiki. So this source is
+// exactly right on the one overlapping table whose truth we already know, and its
+// 2024 figures have not drifted from the authoritative wiki's 2026 ones.
+// Two further checks: the Classes table's own incremental "Level" column
+// running-sums to its "Total" column across all 50 rows, and two independent
+// community datasets that reproduce CATACOMBS_LADDER exactly --
+// NotEnoughUpdates-REPO constants/leveling.json ("catacombs") and SkyCrypt
+// src/constants/leveling.js (DUNGEONEERING_XP) -- both apply that one catacombs
+// table to class levels as well.
+//
+// FINDING: the class ladder does equal the Catacombs ladder, on all 50 values.
+// Earlier passes were right to refuse that as an assumption; it is recorded here
+// as a sourced fact instead. It is kept as its own literal table rather than
+// aliased to CATACOMBS_LADDER precisely because it is a fact and not a
+// definition: an alias would silently rewrite class levels if Catacombs were ever
+// corrected alone. The test asserting the two are equal is the tripwire -- if it
+// ever fails, re-verify both against source rather than "fixing" the test.
+//
+// Classes cap at 50 and share the 200m post-50 cosmetic step
+// (CATACOMBS_COSMETIC_LEVEL_XP): the authoritative wiki's /Dungeoneering states
+// "This also applies to class levels."
+export const DUNGEON_CLASS_LADDER = [
+  50, 125, 235, 395, 625,
+  955, 1425, 2095, 3045, 4385,
+  6275, 8940, 12700, 17960, 25340,
+  35640, 50040, 70040, 97640, 135640,
+  188140, 259640, 356640, 488640, 668640,
+  911640, 1239640, 1684640, 2284640, 3084640,
+  4149640, 5559640, 7459640, 9959640, 13259640,
+  17559640, 23159640, 30359640, 39559640, 51559640,
+  66559640, 85559640, 109559640, 139559640, 177559640,
+  225559640, 285559640, 360559640, 453559640, 569809640
+];
 
 // Source: https://hypixelskyblock.minecraft.wiki/Module:Pet/LevelingData
 // (the data module behind https://hypixelskyblock.minecraft.wiki/Pets section

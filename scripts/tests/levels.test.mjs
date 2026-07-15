@@ -3,6 +3,7 @@ import * as levels from "../../src/levels.js";
 import {
   CATACOMBS_COSMETIC_LEVEL_XP,
   CATACOMBS_LADDER,
+  DUNGEON_CLASS_LADDER,
   GOLDEN_DRAGON_LADDER,
   PET_LADDERS,
   SLAYER_LADDERS,
@@ -205,14 +206,47 @@ export async function run() {
   assert.equal(GOLDEN_DRAGON_LADDER[199] - GOLDEN_DRAGON_LADDER[198], legendaryLastStep);
   assert.equal(GOLDEN_DRAGON_LADDER[199], 210255385, "golden dragon level 200 (max)");
 
-  // --- Deliberate gap -------------------------------------------------------
-  // The wiki publishes no class XP ladder for levels 2-50 and never states that
-  // class thresholds equal Catacombs thresholds. Aliasing the two would ship an
-  // inference under level_source "static_table" / verify_on_wiki true. If a
-  // sourced ladder is ever added, delete this assertion deliberately.
-  assert.equal(
-    levels.DUNGEON_CLASS_LADDER,
-    undefined,
-    "class ladder stays unsourced until the wiki publishes one",
+  // --- Dungeon classes: https://wiki.hypixel.net/Classes ---------------------
+  // Anchors read from that page's "XP Required" table ("Total" column). This
+  // ladder replaced a deliberate gap: hypixelskyblock.minecraft.wiki publishes no
+  // class ladder, so it comes from a secondary, Hypixel-hosted wiki that also
+  // publishes a separate Catacombs table matching CATACOMBS_LADDER on all 50
+  // values. See the provenance comment in src/levels.js.
+  assert.equal(DUNGEON_CLASS_LADDER.length, 50, "classes tabulate levels 1-50");
+  assert.equal(DUNGEON_CLASS_LADDER[0], 50, "class level 1");
+  assert.equal(DUNGEON_CLASS_LADDER[24], 668640, "class level 25");
+  assert.equal(DUNGEON_CLASS_LADDER[49], 569809640, "class level 50 (max)");
+  assert.equal(at(49, DUNGEON_CLASS_LADDER, 50), 0, "below level 1 is 0, not 1");
+  assert.equal(at(50, DUNGEON_CLASS_LADDER, 50), 1);
+  assert.equal(at(569809640, DUNGEON_CLASS_LADDER, 50), 50);
+
+  for (let i = 1; i < DUNGEON_CLASS_LADDER.length; i += 1) {
+    assert.ok(DUNGEON_CLASS_LADDER[i] > DUNGEON_CLASS_LADDER[i - 1], `class ladder ascends at ${i}`);
+  }
+
+  // The class and Catacombs ladders are equal -- a sourced fact, not an alias.
+  // Both tables are transcribed independently from their own pages, so this is a
+  // tripwire: if it ever fails, one of the two sources changed. Re-verify BOTH
+  // against source and update the provenance comments. Do not delete this
+  // assertion, and do not collapse either ladder into the other to satisfy it.
+  assert.deepEqual(
+    DUNGEON_CLASS_LADDER,
+    CATACOMBS_LADDER,
+    "class thresholds equal catacombs thresholds per wiki.hypixel.net/Classes",
+  );
+  assert.notEqual(
+    DUNGEON_CLASS_LADDER,
+    CATACOMBS_LADDER,
+    "equal by value, but must stay a separate table so a catacombs-only fix cannot silently move class levels",
+  );
+
+  // Class data is the one ladder not from the authoritative wiki. A later phase
+  // must be able to surface that rather than pass it off as wiki-sourced.
+  assert.equal(levels.LADDER_AUTHORITY.catacombs, levels.LADDER_AUTHORITY_WIKI);
+  assert.equal(levels.LADDER_AUTHORITY.dungeon_class, levels.LADDER_AUTHORITY_CORROBORATED);
+  assert.notEqual(
+    levels.LADDER_AUTHORITY.dungeon_class,
+    levels.LADDER_AUTHORITY_WIKI,
+    "class ladder must not claim wiki authority",
   );
 }
